@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ttt-discover-infra"
+version = "0.1.0"
+description = "Stub infrastructure for TTT-Discover-style online test-time RL systems."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "TTT-Discover Contributors" }]
+dependencies = [
+    "torch>=2.2",
+    "transformers",
+    "hydra-core",
+    "omegaconf",
+    "wandb",
+    "pydantic",
+    "vllm>=0.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.4"]
+
+[project.scripts]
+ttt-discover-run = "ttt_discover.engine:main"
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["ttt_discover*", "problems*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "problems", "scripts", "tests"]

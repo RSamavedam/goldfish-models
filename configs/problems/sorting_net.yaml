@@ -1,0 +1,11 @@
+defaults:
+  - ../default
+
+reward:
+  name: sorting_net
+  timeout_s: 5
+  sandbox: subprocess
+
+problem:
+  name: sorting_net
+  description: Synthesize a compact sorting routine that correctly sorts small integer lists.

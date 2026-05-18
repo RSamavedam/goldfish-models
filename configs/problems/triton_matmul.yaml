@@ -1,0 +1,11 @@
+defaults:
+  - ../default
+
+reward:
+  name: triton_matmul
+  timeout_s: 60
+  sandbox: subprocess
+
+problem:
+  name: triton_matmul
+  description: Optimize a Triton matrix multiplication kernel for correctness and latency.
