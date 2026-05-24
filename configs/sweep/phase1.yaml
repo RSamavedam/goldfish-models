@@ -1,4 +1,4 @@
-# Phase 1 sweep: bottom-up at the human-working-memory regime.
+# Phase 1 sweep: TTC reasoning benchmarks at the human-WM regime.
 # Each L value is a separate run; native is a separate baseline line.
 
 sweep:
@@ -13,19 +13,19 @@ providers:
 schemes:
   - paged
   - summarized
-  - rag
-  - subagent
+  - truncated
 
+# Each benchmark gets its own kwargs (e.g. limit, dataset_id). The factory
+# in rlm_paged.bench.build_suite consumes them.
 benchmarks:
-  long_doc:
-    - ruler
-    - longbench_v2
-  memory_dialogue:
-    - locomo
-    - memory_agent_bench
-  coding:
-    - swe_bench_verified
-    - repo_qa
+  gpqa_diamond:
+    limit: 50          # full set is 198; subset for cost control
+  math500:
+    limit: 100         # full set is 500
+  aime_2024:
+    limit: 30          # full set
+  hle:
+    limit: 50          # text-only sample from cais/hle
 
 cost_cap_tokens: 100000
-seeds: [0, 1, 2]
+seeds: [0]

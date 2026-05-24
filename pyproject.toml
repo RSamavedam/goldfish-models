@@ -13,15 +13,21 @@ dependencies = [
     "omegaconf",
     "pyyaml",
     "pydantic",
+    "tiktoken",
 ]
 
 [project.optional-dependencies]
-api = ["openai", "anthropic", "google-generativeai"]
+api = [
+    "openai>=1.40",
+    "anthropic>=0.40",
+    "google-genai>=0.7",
+    "datasets>=2.20",
+]
 training = ["torch>=2.2", "transformers", "vllm>=0.4", "wandb"]
 dev = ["pytest>=8", "ruff>=0.4"]
 
 [project.scripts]
-rlm-sweep = "scripts.sweep_phase1:main"
+goldfish-sweep = "scripts.sweep_phase1:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
