@@ -17,7 +17,32 @@ API keys (any subset of providers you want to sweep):
 export OPENAI_API_KEY=...
 export ANTHROPIC_API_KEY=...
 export GOOGLE_API_KEY=...        # or GEMINI_API_KEY
+export TOGETHER_API_KEY=...      # open-weight models (Llama, Qwen, DeepSeek)
 ```
+
+## Provider lineup (default config)
+
+Frontier closed-source APIs:
+
+- `openai:gpt-5`
+- `anthropic:claude-opus-4-7`
+- `gemini:gemini-2.5-pro`
+
+Open-weight, biggest of each family, hosted on Together:
+
+- `together:meta-llama/Llama-3.3-70B-Instruct-Turbo`
+- `together:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo`
+- `together:Qwen/Qwen2.5-72B-Instruct-Turbo`
+- `together:Qwen/Qwen2.5-Coder-32B-Instruct`
+- `together:deepseek-ai/DeepSeek-V3`
+- `together:deepseek-ai/DeepSeek-R1`  ← visible thinking, routed to chunk store
+
+DeepSeek-R1 is the only model in the lineup whose reasoning chain is
+visible to the harness (it emits `<think>...</think>` blocks). When run
+under the paged scheme, R1's thinking is added as `kind="thinking"`
+segments that the chunk store can page out and the model can retrieve via
+`r` ops on later turns. For every other model, thinking (if any) is
+token-billed but opaque.
 
 ## Smoke test (no API calls)
 
@@ -27,22 +52,38 @@ PYTHONPATH=src python scripts/sweep_phase1.py --dry-run
 ```
 
 The dry run prints every (provider, scheme, L, benchmark) cell the full
-sweep would visit. With the default config that's ~264 cells, which
-expand task-by-task into ~25k total runs.
+sweep would visit.
 
-## Small live run (one provider, one benchmark, a handful of tasks)
+## Small live run
+
+Cheapest viable test: one provider, a few tasks. Together's Llama 3.3-70B
+is typically the cheapest competent model in the lineup (~$0.88/MTok), so
+it's the right place to start.
 
 ```bash
 PYTHONPATH=src python scripts/sweep_phase1.py \
   --config configs/sweep/phase1.yaml \
   --output runs/smoke.jsonl \
-  --only-provider anthropic:claude-opus-4-7 \
+  --only-provider together:meta-llama/Llama-3.3-70B-Instruct-Turbo \
   --limit-tasks 3
 ```
 
-This still expands over all schemes × all L values × all benchmarks for
-that one provider — about 88 cells × 3 tasks = ~264 runs. Cost-bound at
-100k tokens per task by default.
+Expansion: 4 benchmarks × (3 schemes × 7 L values + 1 native) = ~88 cells
+× 3 tasks = ~264 runs.
+
+If you want to start with DeepSeek-R1 (the visible-thinking test):
+
+```bash
+PYTHONPATH=src python scripts/sweep_phase1.py \
+  --config configs/sweep/phase1.yaml \
+  --output runs/smoke_r1.jsonl \
+  --only-provider together:deepseek-ai/DeepSeek-R1 \
+  --limit-tasks 3
+```
+
+R1 is more expensive than Llama (~$3/MTok input, $7/MTok output as of
+late 2025) but it's the only model where the paged-CoT story is testable
+without RL training.
 
 ## Full sweep
 
@@ -52,8 +93,8 @@ PYTHONPATH=src python scripts/sweep_phase1.py \
   --output runs/phase1.jsonl
 ```
 
-The script is resumable — already-completed cell keys are read from the
-output JSONL on startup and skipped. Safe to ctrl-c and re-run.
+Resumable — already-completed cell keys are read from the output JSONL on
+startup and skipped. Safe to ctrl-c and re-run.
 
 ## What's in the output
 
@@ -76,14 +117,29 @@ Schema is `RunResult` from `rlm_paged.harness.runner`:
 ## Cost estimation
 
 Worst case per cell with the default 100k cost cap:
-- 100k tokens × 3 providers × ~88 cells × ~50 tasks = ~1.3B tokens
-- At GPT-5 list pricing (~$10/MTok input, $30/MTok output) that's roughly
-  a few hundred USD if every cell actually spends its cap.
-- Real usage will be much lower because most cells terminate via
-  `final_answer` long before 100k tokens. Expect ~$50-100 total for a
-  full sweep across all three providers.
 
-Run small first, then scale.
+- 9 providers × ~88 cells × ~57 avg tasks × 100k tokens = ~4.5B tokens
+  worst-case
+- Real usage is much lower because most cells terminate at `final_answer`
+  well before the cap
+
+Rough per-provider total at the default config, assuming most cells use
+~10-20k tokens not 100k:
+
+| Provider                                | Est. cost (full sweep) |
+|-----------------------------------------|------------------------|
+| openai:gpt-5                            | $30-80                 |
+| anthropic:claude-opus-4-7               | $40-100                |
+| gemini:gemini-2.5-pro                   | $20-60                 |
+| together: Llama-3.3-70B                 | $5-15                  |
+| together: Llama-3.1-405B                | $30-80                 |
+| together: Qwen2.5-72B                   | $5-15                  |
+| together: Qwen2.5-Coder-32B             | $3-10                  |
+| together: DeepSeek-V3                   | $5-15                  |
+| together: DeepSeek-R1                   | $40-120                |
+
+Total estimate for a complete sweep: **$200-500**. Always run small first
+and check the `metadata.cost_cap_spent` distribution before scaling.
 
 ## Analysis
 
@@ -97,3 +153,6 @@ Run small first, then scale.
    used and how often, by L value.
 4. **Failure-mode breakdown**: stacked bar of `failure_reason` by L value
    and scheme.
+5. **Thinking-routed comparison** (R1 only): solve rate under paged with
+   thinking-as-chunks vs. paged with thinking-discarded vs. native. This
+   is the cleanest pre-RL test of the structured-externalization claim.

@@ -223,6 +223,16 @@ def run_cell(
             )
             op_errors += errs
 
+            # If the model emitted visible thinking (e.g. DeepSeek-R1's
+            # <think>...</think> block), surface it as a thinking Segment so
+            # the active scheme decides whether to keep, summarize, or page
+            # it. For native/truncated/summarized this is just more content
+            # that lives in the window; for paged, oversize thinking will be
+            # pushed into the chunk store on cap enforcement and can be
+            # retrieved by the model later via `r` ops.
+            if gen.thinking_text and gen.thinking_text.strip():
+                state.add_segment(Segment(kind="thinking", text=gen.thinking_text))
+
             if visible_text.strip():
                 model_seg = Segment(kind="model", text=visible_text)
                 state.add_segment(model_seg)

@@ -24,4 +24,7 @@ def build_client(spec: str, **kwargs) -> LLMClient:
     if provider == "gemini":
         from rlm_paged.client.gemini import GeminiClient
         return GeminiClient(model, **kwargs)
+    if provider == "together":
+        from rlm_paged.client.together import TogetherClient
+        return TogetherClient(model, **kwargs)
     raise ValueError(f"unknown provider: {provider!r}")
