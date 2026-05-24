@@ -1,40 +1,27 @@
-model:
-  backend: huggingface
-  name: Qwen/Qwen2.5-Coder-32B
-  max_tokens: 4096
+# Default config for the RLM-Paged-Context harness.
+# See DESIGN.md for the full spec.
 
-engine:
-  budget: 50
-  solutions_per_step: 4
-  steps_per_update: 1
-  eval_interval: 10
+window:
+  L: 2048              # active-window cap (middle + tail); prefix is outside L
+  tail_max: 1024       # default L // 2 when omitted
 
-buffer:
-  max_size: 50000
-  selection: puct
-  c_puct: 1.5
+store:
+  chunk_size: 256
+  tier: cpu_dram       # cpu_dram | nvme (deferred)
 
-trainer:
-  lr: 1e-5
-  optimizer: adamw
-  gradient_accumulation: 4
-  max_grad_norm: 1.0
+tools:
+  embeddings: false    # enable `s` similarity op (Phase 1.5)
+  on_overflow: fail    # fail | auto_evict
 
-beta:
-  initial: 1.0
-  schedule: adaptive
-  min_beta: 0.01
-
-reward:
-  name: sorting_net
-  timeout_s: 30
-  sandbox: subprocess
+harness:
+  cost_cap_tokens: 100000
+  schemes:
+    - paged
+    - summarized
+    - rag
+    - subagent
+    - native
 
 logging:
   backend: jsonl
-  project: ttt-discover
   path: runs/default.jsonl
-
-checkpoint:
-  dir: ./checkpoints
-  every_n_steps: 10

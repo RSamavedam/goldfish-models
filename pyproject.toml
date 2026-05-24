@@ -3,36 +3,34 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ttt-discover-infra"
+name = "rlm-paged-context"
 version = "0.1.0"
-description = "Stub infrastructure for TTT-Discover-style online test-time RL systems."
+description = "Hard-capped active context window with verbatim off-GPU paging and a token-frugal tool API for the model to manage its own working memory."
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "TTT-Discover Contributors" }]
+authors = [{ name = "Raghav Samavedam" }]
 dependencies = [
-    "torch>=2.2",
-    "transformers",
-    "hydra-core",
     "omegaconf",
-    "wandb",
+    "pyyaml",
     "pydantic",
-    "vllm>=0.4",
 ]
 
 [project.optional-dependencies]
+api = ["openai", "anthropic", "google-generativeai"]
+training = ["torch>=2.2", "transformers", "vllm>=0.4", "wandb"]
 dev = ["pytest>=8", "ruff>=0.4"]
 
 [project.scripts]
-ttt-discover-run = "ttt_discover.engine:main"
+rlm-sweep = "scripts.sweep_phase1:main"
 
 [tool.setuptools.packages.find]
-where = ["src", "."]
-include = ["ttt_discover*", "problems*"]
+where = ["src"]
+include = ["rlm_paged*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "."]
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "problems", "scripts", "tests"]
+src = ["src", "scripts", "tests"]

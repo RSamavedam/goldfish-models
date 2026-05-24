@@ -1,8 +1,23 @@
-# TTT-Discover Infrastructure
+# RLM-Paged-Context
 
-A modular Python skeleton for Test-Time Training to Discover (TTT-Discover)-style systems: online reinforcement learning at test time against a single hard problem with continuous verifiable reward.
+Hard-capped active context window with verbatim off-GPU paging and a token-frugal
+tool API for the model to manage its own working memory. Targets the human
+working-memory regime (`L` from 2k down to 32 tokens) where reasoning is forced
+to externalize into a queryable chunk store.
 
-This repo is intentionally a stub implementation. It gives you the interfaces, orchestration loop, buffer/search/trainer plumbing, example problems, configs, and unit tests needed to start swapping in real model backends and reward evaluators.
+See [DESIGN.md](DESIGN.md) for the full spec, motivation, and four-phase plan.
+
+## What's here
+
+- `src/rlm_paged/store/` — verbatim chunk store with metadata + reference graph
+- `src/rlm_paged/window/` — active-window state with hard-cap invariants
+- `src/rlm_paged/tools/` — single-char op codes (`e`, `r`, `q`, `a`, `l`, `s`)
+- `src/rlm_paged/client/` — provider adapters (OpenAI / Anthropic / Gemini) — stubs
+- `src/rlm_paged/harness/` — sweep runner + cost cap
+- `src/rlm_paged/bench/` — benchmark loaders — stubs
+- `src/rlm_paged/reward/` — sandboxed reward primitives (reused from legacy)
+- `tests/` — unit tests for store, window, tools, cost cap
+- `legacy/` — the previous TTT-Discover skeleton, archived in place
 
 ## Quickstart
 
@@ -11,20 +26,11 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 pytest
-python scripts/run.py --config configs/default.yaml --budget 5
 ```
 
-## What Works
+## Phases
 
-- End-to-end generate -> evaluate -> train loop with no-op policy updates.
-- In-memory solution buffer with uniform and PUCT-style selection.
-- Entropic online trainer objective over stub training batches.
-- Reward function registry and sandboxed Python execution helper.
-- Toy sorting-network problem plus Triton matmul placeholder.
-- JSONL logging and pickle-based checkpoint scaffolding.
-
-## Roadmap
-
-1. **Phase 1:** HF-backed generation, real training batches, toy problem loop.
-2. **Phase 2:** PUCT selection, adaptive beta, sandboxed rewards, Triton kernels.
-3. **Phase 3:** Async generation/evaluation/training, branching checkpoints, dashboards.
+1. **Phase 1** — API harness + L-sweep across long-doc, dialogue, and coding benchmarks
+2. **Phase 2** — RL finetune Qwen2.5-Coder-14B on p5 (8×H100) under the paged regime
+3. **Phase 3** — Re-eval + cognitive-psych probes for emergent memory structure
+4. **Phase 4** — Triton kernels exploiting the pinned-prefix + extreme-batch regime
