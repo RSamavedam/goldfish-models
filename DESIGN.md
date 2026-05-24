@@ -187,6 +187,26 @@ The wrapper parses these calls out of the model's generation stream and
 executes them inline. The tool-call traffic counts against `L` while it sits
 in the active window, but is evictable once it has been consumed.
 
+There's also a parallel **structured-tool mirror** of these ops (Anthropic
+JSON tool definitions) for native-tool-calling clients — see
+`src/rlm_paged/tools/structured.py`. It's used by the Anthropic
+interleaved-thinking path; everywhere else the op-code text channel wins
+on token frugality.
+
+### 2.6 Per-provider L-enforcement asymmetry
+
+The thesis assumes the wrapper can see and bound every token of the
+model's reasoning. That works cleanly for visible-CoT models and for
+DeepSeek-R1 (whose `<think>` blocks we strip and route through the chunk
+store). It works *approximately* for Anthropic Claude with extended
+thinking + interleaved tool calls — the per-thinking-block budget is a
+soft cap, and paging happens between blocks, not within them. It does
+**not** work for OpenAI o-series or Gemini opaque thinking — reasoning
+happens server-side and we can't read or interrupt it.
+
+See [docs/closed_thinking_asymmetry.md](docs/closed_thinking_asymmetry.md)
+for the full per-provider table and what it means for paper claims.
+
 ### 2.6 The active-window invariant
 
 The wrapper enforces, at every decode step:

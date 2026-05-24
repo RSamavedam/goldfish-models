@@ -198,12 +198,44 @@ def run_cell(
                 break
 
             try:
-                gen = client.generate(
-                    prompt,
-                    max_tokens=cell.max_tokens_per_turn,
-                    system=system_prompt,
-                    temperature=0.0,
-                )
+                if getattr(client, "supports_interleaved_thinking", False):
+                    # Interleaved-thinking clients dispatch tools internally
+                    # (Anthropic requires signed thinking blocks to be
+                    # round-tripped within one logical turn). We pass a
+                    # dispatcher callback so tool calls reach the same
+                    # ToolDispatcher used in the text-channel path.
+                    from rlm_paged.tools import structured_to_parsed_op
+
+                    dispatcher.step = turn
+
+                    def _dispatch_native(
+                        tool_name: str, tool_input: dict
+                    ) -> dict:
+                        op = structured_to_parsed_op(tool_name, tool_input)
+                        op_counts[op.code] += 1
+                        result = dispatcher.dispatch(op)
+                        if not result.ok:
+                            return {"ok": False, "error": result.error}
+                        if op.code == "r":
+                            from rlm_paged.client.tokenizer import decode
+
+                            tokens = result.payload["tokens"]
+                            return {"ok": True, "tokens": decode(tokens)}
+                        return {"ok": True, "payload": str(result.payload)}
+
+                    gen = client.generate_with_dispatcher(  # type: ignore[attr-defined]
+                        prompt,
+                        max_tokens=cell.max_tokens_per_turn,
+                        system=system_prompt,
+                        dispatch=_dispatch_native,
+                    )
+                else:
+                    gen = client.generate(
+                        prompt,
+                        max_tokens=cell.max_tokens_per_turn,
+                        system=system_prompt,
+                        temperature=0.0,
+                    )
             except Exception as exc:
                 failure_reason = f"provider_error: {type(exc).__name__}: {exc}"
                 break

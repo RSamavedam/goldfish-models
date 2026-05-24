@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import itertools
 import json
 import sys
 import time
@@ -22,6 +21,35 @@ from rlm_paged.bench import build_suite
 from rlm_paged.client import build_client
 from rlm_paged.harness import SweepCell, build_scheme, run_cell
 from rlm_paged.utils.config import load_config
+
+
+def _provider_spec_and_kwargs(entry: Any) -> tuple[str, dict[str, Any]]:
+    """A provider entry can be a bare string spec or a {spec, kwargs} mapping."""
+    if isinstance(entry, str):
+        return entry, {}
+    if isinstance(entry, dict) and "spec" in entry:
+        return entry["spec"], dict(entry.get("kwargs") or {})
+    raise ValueError(f"unrecognized provider entry: {entry!r}")
+
+
+def _build_client_for_cell(spec: str, kwargs: dict[str, Any], L: int) -> Any:
+    """Resolve sweep-time substitutions (e.g. thinking_budget_to_L) then build."""
+    resolved = dict(kwargs)
+    if resolved.pop("thinking_budget_to_L", False):
+        # L=0 means "no cap" → fall back to a reasonable default thinking budget.
+        resolved["thinking_budget"] = max(1024, L) if L > 0 else 4096
+    if resolved.get("interleaved_thinking"):
+        from rlm_paged.tools import ANTHROPIC_TOOLS
+
+        resolved.setdefault("tools", ANTHROPIC_TOOLS)
+    return build_client(spec, **resolved)
+
+
+def _provider_label(spec: str, kwargs: dict[str, Any]) -> str:
+    """Stable label including interleaved-thinking variant so cell_keys differ."""
+    if kwargs.get("interleaved_thinking"):
+        return f"{spec}+interleaved"
+    return spec
 
 
 def _cell_key(cell: SweepCell) -> str:
@@ -43,23 +71,22 @@ def _read_done_keys(path: Path) -> set[str]:
     return done
 
 
-def _expand(config: dict) -> Iterable[tuple[str, str, int, str, dict]]:
-    """Yield (provider_spec, scheme, L, benchmark_name, suite_kwargs) tuples."""
-    providers = config["providers"]
-    schemes = config["schemes"]
+def _expand(
+    config: dict,
+) -> Iterable[tuple[str, dict[str, Any], str, int, str, dict]]:
+    """Yield (spec, provider_kwargs, scheme, L, benchmark_name, suite_kwargs)."""
     L_values = list(config["sweep"]["L_values"])
-    if config["sweep"].get("include_native_baseline", False):
-        # Native is encoded as L=0 + scheme=native; only emit once per provider/bench.
-        pass
+    include_native = config["sweep"].get("include_native_baseline", False)
     benches = config["benchmarks"]
-    for prov in providers:
+    schemes = config["schemes"]
+    for entry in config["providers"]:
+        spec, kwargs = _provider_spec_and_kwargs(entry)
         for bench_name, bench_kwargs in benches.items():
             for scheme in schemes:
                 for L in L_values:
-                    yield prov, scheme, L, bench_name, bench_kwargs or {}
-            # Native baseline once per (provider, bench), L=0.
-            if config["sweep"].get("include_native_baseline", False):
-                yield prov, "native", 0, bench_name, bench_kwargs or {}
+                    yield spec, kwargs, scheme, L, bench_name, bench_kwargs or {}
+            if include_native:
+                yield spec, kwargs, "native", 0, bench_name, bench_kwargs or {}
 
 
 def main() -> int:
@@ -70,7 +97,7 @@ def main() -> int:
     parser.add_argument("--limit-tasks", type=int, default=None,
                         help="Cap tasks per benchmark (for smoke tests).")
     parser.add_argument("--only-provider", default=None,
-                        help="Run only one provider spec (for debugging).")
+                        help="Run only one provider label (e.g. 'anthropic:claude-opus-4-7+interleaved').")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -83,8 +110,9 @@ def main() -> int:
     cells_skipped = 0
     cells_failed = 0
 
-    for prov, scheme_name, L, bench_name, bench_kwargs in _expand(config):
-        if args.only_provider and prov != args.only_provider:
+    for spec, prov_kwargs, scheme_name, L, bench_name, bench_kwargs in _expand(config):
+        label = _provider_label(spec, prov_kwargs)
+        if args.only_provider and label != args.only_provider:
             continue
 
         suite_kwargs = dict(bench_kwargs)
@@ -92,9 +120,7 @@ def main() -> int:
             suite_kwargs["limit"] = args.limit_tasks
 
         if args.dry_run:
-            # In dry-run, print one line per (prov, scheme, L, bench) and skip
-            # task-level expansion so we don't need network/datasets installed.
-            print(f"would run cells: {prov} | {scheme_name} | L={L} | {bench_name}")
+            print(f"would run cells: {label} | {scheme_name} | L={L} | {bench_name}")
             cells_planned += 1
             continue
 
@@ -111,13 +137,15 @@ def main() -> int:
             continue
 
         scheme = build_scheme(scheme_name)
-        client = build_client(prov)
-        summarizer = build_client(prov) if scheme_name == "summarized" else None
+        client = _build_client_for_cell(spec, prov_kwargs, L)
+        # Summarizer always uses the plain (non-interleaved) client variant
+        # since interleaved+tools doesn't apply to a summarization role.
+        summarizer = build_client(spec) if scheme_name == "summarized" else None
 
         for task in tasks:
             cells_planned += 1
             cell = SweepCell(
-                provider=prov,
+                provider=label,
                 scheme=scheme_name,
                 L=L,
                 benchmark=bench_name,

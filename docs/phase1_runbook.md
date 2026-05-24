@@ -24,9 +24,13 @@ export TOGETHER_API_KEY=...      # open-weight models (Llama, Qwen, DeepSeek)
 
 Frontier closed-source APIs:
 
-- `openai:gpt-5`
-- `anthropic:claude-opus-4-7`
-- `gemini:gemini-2.5-pro`
+- `openai:gpt-5` — reasoning opaque (Regime C, see closed_thinking_asymmetry.md)
+- `anthropic:claude-opus-4-7` — plain (Regime A as far as visible CoT goes)
+- `anthropic:claude-opus-4-7+interleaved` — interleaved thinking + native
+  paging tools (Regime B). thinking_budget tracks the sweep's L per cell.
+  This is the closed-model path where the wrapper can actually route
+  thinking between blocks.
+- `gemini:gemini-2.5-pro` — thinking opaque (Regime C)
 
 Open-weight, biggest of each family, hosted on Together:
 
@@ -35,14 +39,17 @@ Open-weight, biggest of each family, hosted on Together:
 - `together:Qwen/Qwen2.5-72B-Instruct-Turbo`
 - `together:Qwen/Qwen2.5-Coder-32B-Instruct`
 - `together:deepseek-ai/DeepSeek-V3`
-- `together:deepseek-ai/DeepSeek-R1`  ← visible thinking, routed to chunk store
+- `together:deepseek-ai/DeepSeek-R1`  ← visible thinking → chunk store (Regime A)
 
-DeepSeek-R1 is the only model in the lineup whose reasoning chain is
-visible to the harness (it emits `<think>...</think>` blocks). When run
-under the paged scheme, R1's thinking is added as `kind="thinking"`
-segments that the chunk store can page out and the model can retrieve via
-`r` ops on later turns. For every other model, thinking (if any) is
-token-billed but opaque.
+DeepSeek-R1 is the only *reasoning-trained* model whose chain is fully
+visible to the harness. Under the paged scheme its thinking lands as
+`kind="thinking"` segments that the chunk store pages out; the model can
+retrieve them via `r` ops later. For Claude+interleaved, paging happens
+between thinking blocks (Regime B — soft cap). For every other model,
+thinking (if any) is token-billed but opaque (Regime C).
+
+See `docs/closed_thinking_asymmetry.md` for the per-regime honest
+breakdown of what L-enforcement actually means per provider.
 
 ## Smoke test (no API calls)
 
@@ -130,6 +137,7 @@ Rough per-provider total at the default config, assuming most cells use
 |-----------------------------------------|------------------------|
 | openai:gpt-5                            | $30-80                 |
 | anthropic:claude-opus-4-7               | $40-100                |
+| anthropic:claude-opus-4-7+interleaved   | $80-200 (thinking)     |
 | gemini:gemini-2.5-pro                   | $20-60                 |
 | together: Llama-3.3-70B                 | $5-15                  |
 | together: Llama-3.1-405B                | $30-80                 |
@@ -138,8 +146,10 @@ Rough per-provider total at the default config, assuming most cells use
 | together: DeepSeek-V3                   | $5-15                  |
 | together: DeepSeek-R1                   | $40-120                |
 
-Total estimate for a complete sweep: **$200-500**. Always run small first
-and check the `metadata.cost_cap_spent` distribution before scaling.
+Total estimate for a complete sweep: **$300-700**. The interleaved
+Anthropic path is the most expensive: thinking tokens are billed at
+output rates and the multi-call dance compounds them. Always run small
+first and check the `metadata.cost_cap_spent` distribution before scaling.
 
 ## Analysis
 

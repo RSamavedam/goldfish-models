@@ -51,3 +51,13 @@ class LLMClient(ABC):
     def supports_visible_thinking(self) -> bool:
         """True iff the provider exposes thinking content the harness can read."""
         return False
+
+    @property
+    def supports_interleaved_thinking(self) -> bool:
+        """True iff the client dispatches native tool calls mid-thinking.
+
+        Clients that return True must also implement `generate_with_dispatcher`
+        — the harness calls that instead of `generate` to preserve signed
+        thinking blocks across tool calls within a single logical turn.
+        """
+        return False

@@ -5,13 +5,23 @@ sweep:
   L_values: [32, 64, 128, 256, 512, 1024, 2048]
   include_native_baseline: true
 
+# Each provider entry can be a bare string (no kwargs) or a mapping with
+# `spec` plus optional `kwargs`. Reserved key `thinking_budget_to_L`
+# tells the sweep script to set `thinking_budget` equal to the current L
+# for that cell (only valid for Anthropic interleaved thinking).
 providers:
   # Frontier closed-source APIs.
   - openai:gpt-5
   - anthropic:claude-opus-4-7
+  # Same Claude model, but with interleaved thinking + native paging
+  # tools. thinking_budget tracks L per cell — see closed_thinking_
+  # asymmetry.md for the soft-cap caveat.
+  - spec: anthropic:claude-opus-4-7
+    kwargs:
+      interleaved_thinking: true
+      thinking_budget_to_L: true   # set per-cell from sweep L
   - gemini:gemini-2.5-pro
   # Open-weight, hosted on Together (OpenAI-compatible API).
-  # "biggest of each family" lineup.
   - together:meta-llama/Llama-3.3-70B-Instruct-Turbo
   - together:meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
   - together:Qwen/Qwen2.5-72B-Instruct-Turbo
