@@ -5,6 +5,10 @@ the old paged-active-window design). The block store works in *text* —
 blocks have a `.text` field — because the stateless-turn architecture
 operates on the model's visible output, not on internal KV state.
 
+Tracks an unread cursor per type. The cursor advances when `query()`
+returns a block whose per-type index is >= the cursor. Used by the
+system-prompt prelude to surface unread inbox state to the model.
+
 See DESIGN.md §2.4–2.5.
 """
 
@@ -20,6 +24,9 @@ class BlockStore:
         self._blocks: dict[int, Block] = {}              # global_index -> Block
         self._by_type: dict[str, list[Block]] = {t: [] for t in BLOCK_TYPES}
         self._next_global: int = 0
+        # Per-type next-unread index. A block at index >= unread_cursor[type]
+        # has not yet been delivered via a query.
+        self._unread_cursor: dict[str, int] = {t: 0 for t in BLOCK_TYPES}
 
     # ----------------------------------------------------- writes
 
@@ -82,6 +89,9 @@ class BlockStore:
         Bounds inclusive. Either may be omitted for open-ended. Negative
         indices count from the end (Python-list semantics). `tag` filters
         to only blocks carrying that tag. Empty results are not an error.
+
+        Advances the unread cursor for `type` if any returned block's
+        index is >= the current cursor.
         """
         if type not in BLOCK_TYPES:
             raise ValueError(f"unknown block type: {type!r}")
@@ -91,9 +101,6 @@ class BlockStore:
         n = len(all_blocks)
         s = 0 if start is None else (start if start >= 0 else n + start)
         e = (n - 1) if end is None else (end if end >= 0 else n + end)
-        # If the *requested* range falls entirely outside the valid window,
-        # return empty rather than silently clamping to the last item — that
-        # surfaces model errors more clearly than returning a nearby block.
         if s >= n or e < 0 or s > e:
             return []
         s = max(0, s)
@@ -101,24 +108,46 @@ class BlockStore:
         results = all_blocks[s : e + 1]
         if tag is not None:
             results = [b for b in results if tag in b.tags]
+        if results:
+            highest_seen = max(b.index for b in results)
+            if highest_seen + 1 > self._unread_cursor[type]:
+                self._unread_cursor[type] = highest_seen + 1
         for b in results:
             b.access_count += 1
             b.last_accessed_turn = at_turn
         return list(results)
 
+    # ----------------------------------------------------- inbox / unread
+
+    def unread_count(self, type: str) -> int:
+        """How many blocks of `type` have not yet been returned by a query."""
+        if type not in BLOCK_TYPES:
+            raise ValueError(f"unknown block type: {type!r}")
+        return max(0, len(self._by_type[type]) - self._unread_cursor[type])
+
+    def earliest_unread_index(self, type: str) -> int | None:
+        """Per-type index of the earliest unread block, or None if all read."""
+        if self.unread_count(type) == 0:
+            return None
+        return self._unread_cursor[type]
+
     # ----------------------------------------------------- stats (for system prompt)
 
     def stats(self) -> dict[str, dict[str, int]]:
-        """Per-type counts + last index for the system-prompt prelude.
+        """Per-type counts + last index + unread info for the prompt prelude.
 
-        Shape: {'note': {'count': 12, 'last_index': 11}, ...}
+        Shape: {'note': {'count': 12, 'last_index': 11, 'unread': 0,
+                         'earliest_unread': None}, ...}
         """
         out: dict[str, dict[str, int]] = {}
         for t in BLOCK_TYPES:
             blocks = self._by_type[t]
+            earliest = self.earliest_unread_index(t)
             out[t] = {
                 "count": len(blocks),
                 "last_index": (blocks[-1].index if blocks else -1),
+                "unread": self.unread_count(t),
+                "earliest_unread": earliest if earliest is not None else -1,
             }
         return out
 

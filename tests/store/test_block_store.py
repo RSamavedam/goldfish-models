@@ -6,17 +6,23 @@ from rlm_paged.store import BLOCK_TYPES, BlockStore
 
 
 def test_block_types_canonical():
-    assert BLOCK_TYPES == ("task", "observation", "note", "continuing_instruction")
+    assert BLOCK_TYPES == (
+        "user_message",
+        "assistant_reply",
+        "observation",
+        "note",
+        "continuing_instruction",
+    )
 
 
 def test_append_assigns_monotonic_indices_per_type():
     s = BlockStore()
     b1 = s.append("note", "first", created_at_turn=0)
     b2 = s.append("note", "second", created_at_turn=0)
-    b3 = s.append("task", "task1", created_at_turn=-1)
+    b3 = s.append("user_message", "hi", created_at_turn=-1)
     assert (b1.type, b1.index, b1.global_index) == ("note", 0, 0)
     assert (b2.type, b2.index, b2.global_index) == ("note", 1, 1)
-    assert (b3.type, b3.index, b3.global_index) == ("task", 0, 2)
+    assert (b3.type, b3.index, b3.global_index) == ("user_message", 0, 2)
 
 
 def test_append_unknown_type_raises():
@@ -104,6 +110,13 @@ def test_stats_reports_count_and_last_index():
     s.append("note", "b", created_at_turn=0)
     s.append("observation", "o", created_at_turn=0)
     stats = s.stats()
-    assert stats["note"] == {"count": 2, "last_index": 1}
-    assert stats["observation"] == {"count": 1, "last_index": 0}
-    assert stats["task"] == {"count": 0, "last_index": -1}
+    # Now includes unread fields; both notes are unread (never queried).
+    assert stats["note"] == {
+        "count": 2, "last_index": 1, "unread": 2, "earliest_unread": 0,
+    }
+    assert stats["observation"] == {
+        "count": 1, "last_index": 0, "unread": 1, "earliest_unread": 0,
+    }
+    assert stats["user_message"] == {
+        "count": 0, "last_index": -1, "unread": 0, "earliest_unread": -1,
+    }

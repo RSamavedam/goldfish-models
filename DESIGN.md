@@ -156,6 +156,11 @@ The prompt the model sees at turn `t`:
 │      (code-exec, web search, etc.); result becomes an      │
 │      observation block in the store and may be queried     │
 │      by the next turn                                      │
+│    - `say <text>` — optional. Sends a message to the user; │
+│      writes an assistant_reply block and (if the harness   │
+│      has a callback wired) surfaces the text to a UI side  │
+│      channel. Most turns don't use this — reasoning lives  │
+│      in notes/continue, not in user-facing messages.       │
 └────────────────────────────────────────────────────────────┘
 
            writes ↑    ↓ reads
@@ -163,16 +168,29 @@ The prompt the model sees at turn `t`:
 │  BLOCK STORE  (off-GPU; CPU DRAM + NVMe spill)             │
 │                                                            │
 │  Append-only, typed:                                       │
-│    - task[0..]               : original task prompt(s)     │
-│    - observation[0..]        : harness-injected tool       │
-│                                results, verbatim           │
-│    - note[0..]               : model-authored notes        │
-│    - continuing_instruction  : one per turn, indexed by    │
-│                                turn number                 │
+│    - user_message[0..]      : the user's input. The FIRST  │
+│                                user_message IS the original│
+│                                task prompt. New messages   │
+│                                can arrive between turns.   │
+│    - assistant_reply[0..]   : the model's `say` outputs.   │
+│                                Audit trail of model→user.  │
+│    - observation[0..]       : harness-injected tool        │
+│                                results, verbatim.          │
+│    - note[0..]              : model-authored notes.        │
+│    - continuing_instruction : one per turn, indexed by     │
+│                                turn number.                │
 │                                                            │
 │  Each block carries: id (per-type monotonic), global       │
-│  index, created_at_turn, refs (outgoing+incoming),         │
-│  tags (model-assigned), optional embedding.                │
+│  index, created_at_turn, real-wall-clock timestamp, refs   │
+│  (outgoing+incoming), tags (model-assigned), optional      │
+│  embedding.                                                │
+│                                                            │
+│  The store tracks an unread cursor per type (most useful   │
+│  for user_message). When the model queries a range that    │
+│  includes previously-unseen blocks, the cursor advances    │
+│  past them. The system prompt's INBOX section reports the  │
+│  current unread count + earliest unread index so the model │
+│  knows to read new user input before continuing.           │
 └────────────────────────────────────────────────────────────┘
 ```
 

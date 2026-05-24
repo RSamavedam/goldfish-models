@@ -106,7 +106,10 @@ def test_system_prompt_includes_store_stats():
     suite = _FakeSuite()
     run_stateless_cell(_cell(), client=client, suite=suite, task=suite.tasks()[0])
     sys_prompt = client.systems_received[0]
-    assert "task: 1 blocks" in sys_prompt
+    # Task is now a user_message; inbox section should flag it as unread.
+    assert "user_message: 1 blocks" in sys_prompt
+    assert "1 unread" in sys_prompt
+    assert "user_message:0" in sys_prompt
     assert "note: (none)" in sys_prompt
 
 

@@ -12,7 +12,7 @@ from rlm_paged.tools.executor import QueuedQuery
 
 def test_assemble_input_with_no_prior_state():
     store = BlockStore()
-    store.append("task", "compute the answer", created_at_turn=-1)
+    store.append("user_message", "compute the answer", created_at_turn=-1)
     out = assemble_input(
         store=store,
         pending_queries=[],

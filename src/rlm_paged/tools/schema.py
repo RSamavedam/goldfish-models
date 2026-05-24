@@ -17,6 +17,7 @@ OP_REFERENCE: dict[str, str] = {
     "query": "Queue a retrieval for the next turn: `query <type> <start> <end> [tag=T]`.",
     "pipe": "Execute a query and feed its result into another op in one step.",
     "call": "External tool call. Body holds tool arguments. Result -> observation block.",
+    "say": "Optional: send a message to the user. Body holds the text. Writes assistant_reply.",
 }
 
 
@@ -30,14 +31,21 @@ this turn after it ends — anything you need later must be explicitly
 written to the block store.
 
 The block store is append-only and typed:
-    task[*]                   problem prompts (harness-written)
-    observation[*]            tool-call results (harness-written, verbatim)
-    note[*]                   your knowledge (you write; cannot edit/delete)
-    continuing_instruction[*] one message per turn (you write; one per turn)
+    user_message[*]           messages from the user. The FIRST user_message
+                              is the original task. New ones can arrive at
+                              any time between turns; check the INBOX below.
+    assistant_reply[*]        your messages to the user (you write via `say`).
+    observation[*]            tool-call results (harness-written, verbatim).
+    note[*]                   your knowledge (you write; cannot edit/delete).
+    continuing_instruction[*] one message per turn (you write; one per turn).
 
 CURRENT STORE STATS
 ===================
 {store_stats}
+
+INBOX
+=====
+{inbox_status}
 
 OP SURFACE
 ==========
@@ -50,34 +58,73 @@ tokens) for in-turn thinking; it is discarded after the turn.
                             Exactly one per turn. Will be truncated if oversize.
   query <type> <start> <end> [tag=T]
                             Queue a retrieval for the next turn. Indices
-                            are inclusive; -1 means "last".
+                            are inclusive; -1 means "last". Querying a
+                            user_message block marks it as read.
   pipe (query ...) -> <dest>
                             Execute query and route results to `dest`
-                            (note / continue / call).
+                            (note / continue / say / call).
   call <tool_name>          External tool (body holds args). Result becomes
                             a new observation block.
+  say [tag=T]               Optional. Send a message to the user. Body holds
+                            the text. Writes an assistant_reply block.
 
 EXAMPLE
 =======
     <scratch>
     The prior turn's continue said to compute case n=3.
+    User has 1 unread message.
     </scratch>
 
-    query observation -1 -1
+    query user_message -1 -1
     note tag=plan
         Approach: enumerate small cases, look for a pattern, prove by
         induction.
+    say
+        Working on it — will share once I have a clean answer.
     continue
         Computed n=3 yields 7. Next: try n=4, then conjecture closed form.
 
 RULES OF THUMB
 ==============
+- Read the inbox FIRST when there are unread user_messages; the user's
+  most recent intent may supersede prior work.
 - Tight queries beat wide ones. The retrieved-content budget is hard.
 - Notes should be compressed knowledge, not verbatim transcripts.
 - Refer to blocks by `<type>:<index>` in your continuing_instruction so
   you can re-query specifically next turn.
 - If you run out of budget, prioritize the continue over notes.
+- Use `say` sparingly: only when the user needs to hear something. Most
+  reasoning belongs in notes / continue, not in user-facing messages.
 """
+
+
+def _render_stats(store_stats: dict) -> str:
+    lines = []
+    for type_name, info in store_stats.items():
+        count = info["count"]
+        last = info["last_index"]
+        if count == 0:
+            lines.append(f"    {type_name}: (none)")
+        else:
+            lines.append(
+                f"    {type_name}: {count} blocks, last index {last}"
+            )
+    return "\n".join(lines)
+
+
+def _render_inbox(store_stats: dict) -> str:
+    info = store_stats.get("user_message", {"count": 0, "unread": 0, "earliest_unread": -1})
+    unread = info.get("unread", 0)
+    earliest = info.get("earliest_unread", -1)
+    total = info.get("count", 0)
+    if unread == 0:
+        if total == 0:
+            return "    (no user messages yet)"
+        return f"    all caught up — {total} user_message blocks, none unread."
+    return (
+        f"    {unread} unread (earliest: user_message:{earliest}); "
+        f"{total} total user_message blocks."
+    )
 
 
 def render_system_prompt(
@@ -89,20 +136,11 @@ def render_system_prompt(
     """Render the system prompt with current store stats and budget figures."""
     half = max(1, L // 2)
     scratch = scratch_budget if scratch_budget is not None else max(1, L // 8)
-    stats_lines = []
-    for type_name, info in store_stats.items():
-        last = info["last_index"]
-        count = info["count"]
-        if count == 0:
-            stats_lines.append(f"    {type_name}: (none)")
-        else:
-            stats_lines.append(
-                f"    {type_name}: {count} blocks, last index {last}"
-            )
     return SYSTEM_PROMPT_TEMPLATE.format(
         half_L=half,
         scratch_budget=scratch,
-        store_stats="\n".join(stats_lines),
+        store_stats=_render_stats(store_stats),
+        inbox_status=_render_inbox(store_stats),
     )
 
 

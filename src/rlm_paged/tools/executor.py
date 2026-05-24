@@ -48,6 +48,7 @@ class ExecutionResult:
     continuing_instruction_index: int | None = None               # global index
     pending_queries: list[QueuedQuery] = field(default_factory=list)
     external_calls: list[ExternalCall] = field(default_factory=list)
+    assistant_replies: list[int] = field(default_factory=list)    # global indices
     errors: list[str] = field(default_factory=list)
     has_mandatory_continue: bool = False
 
@@ -132,6 +133,21 @@ def execute(
                         issued_by_op_idx=idx,
                     )
                 )
+
+            elif op.name == "say":
+                # Surface a message to the user. The harness can also pipe
+                # it to a side channel (stdout, websocket, etc.) by reading
+                # `result.assistant_replies` and looking up the block text.
+                if not op.body.strip():
+                    result.errors.append(f"op {idx}: empty say body")
+                    continue
+                block = store.append(
+                    "assistant_reply",
+                    op.body,
+                    created_at_turn=turn,
+                    tags=_tag_list(op.args.get("tag")),
+                )
+                result.assistant_replies.append(block.global_index)
 
             else:
                 result.errors.append(f"op {idx}: unknown op `{op.name}`")

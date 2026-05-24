@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-OP_NAMES = ("note", "continue", "query", "pipe", "call", "scratch")
+OP_NAMES = ("note", "continue", "query", "pipe", "call", "say", "scratch")
 
 
 @dataclass
@@ -59,7 +59,7 @@ SCRATCH_CLOSE = "</scratch>"
 # --------------------------------------------------------------------- #
 
 _HEADER_RE = re.compile(
-    r"^(?P<name>note|continue|query|pipe|call)(?:\s+(?P<rest>.*))?$"
+    r"^(?P<name>note|continue|query|pipe|call|say)(?:\s+(?P<rest>.*))?$"
 )
 _KV_RE = re.compile(r"(\w+)=(\S+)")
 
