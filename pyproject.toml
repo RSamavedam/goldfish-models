@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rlm-paged-context"
+name = "goldfish-models"
 version = "0.1.0"
-description = "Hard-capped active context window with verbatim off-GPU paging and a token-frugal tool API for the model to manage its own working memory."
+description = "Language models with goldfish-sized working memory: hard-capped active context, verbatim off-GPU paging, and a token-frugal tool API the model uses to manage its own working memory."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Raghav Samavedam" }]

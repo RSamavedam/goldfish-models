@@ -1,9 +1,13 @@
-# RLM-Paged-Context
+# goldfish-models
 
-Hard-capped active context window with verbatim off-GPU paging and a token-frugal
-tool API for the model to manage its own working memory. Targets the human
-working-memory regime (`L` from 2k down to 32 tokens) where reasoning is forced
-to externalize into a queryable chunk store.
+> Language models with goldfish-sized working memory.
+
+Hard-capped active context window (`L` from 2k down to 32 tokens), verbatim
+off-GPU paging of evicted content, and a token-frugal tool API the model uses
+to manage its own working memory. The bet: at the human-working-memory
+regime, the tiny active window is not a limitation — it is the point.
+Reasoning gets externalized into a queryable chunk store, and the model
+learns (via RL) to manage that store the way a CPU manages cache.
 
 See [DESIGN.md](DESIGN.md) for the full spec, motivation, and four-phase plan.
 

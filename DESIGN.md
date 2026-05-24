@@ -1,5 +1,7 @@
-# RLM-Paged-Context: Design Document
+# goldfish-models: Design Document
 
+> Language models with goldfish-sized working memory.
+>
 > A wrapper that enforces a hard active-context cap `L` on top of any LLM,
 > with verbatim, append-only paging of evicted content to off-GPU storage
 > and a token-frugal tool API for the model to manage its own working memory.
