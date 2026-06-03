@@ -27,7 +27,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from rlm_paged.bench.base import BenchSuite, BenchTask
 from rlm_paged.client.base import LLMClient
@@ -147,8 +147,23 @@ def run_shell_cell(
     task: BenchTask,
     agent_root: Path | None = None,
     keep_agent_dir: bool = False,
+    before_first_turn: Callable[[Any], None] | None = None,
+    after_last_turn: Callable[[Any, "ShellCellResult"], str | None] | None = None,
 ) -> ShellCellResult:
-    """Run one trajectory under the shell-harness architecture."""
+    """Run one trajectory under the shell-harness architecture.
+
+    `before_first_turn(fs)` runs after the AgentFS is initialized but
+    before turn 0. Use it to prepopulate the agent's filesystem (e.g.
+    clone a target repo for SWE-bench-style tasks). The callback receives
+    the AgentFS and may mutate it freely.
+
+    `after_last_turn(fs, result)` runs after the trajectory exits but
+    before scoring. If it returns a string, that string is used as the
+    `response` argument to `suite.score()` instead of the user_output
+    concatenation. Use it to inject a custom artifact (e.g. an extracted
+    unified-diff patch) into the scorer's input. Returns None to keep
+    default behavior.
+    """
     started = time.perf_counter()
 
     k = cell.L if cell.L > 0 else 10**9
@@ -166,6 +181,32 @@ def run_shell_cell(
     # `cat` it explicitly to see it, and re-cat costs tokens.
     instructions = suite.task_prompt(task)
     fs = AgentFS.make(root, instructions=instructions)
+    if before_first_turn is not None:
+        try:
+            before_first_turn(fs)
+        except Exception as exc:
+            # Bootstrap failure is fatal — return early with a clear reason.
+            if not keep_agent_dir:
+                fs.cleanup()
+            return ShellCellResult(
+                cell=cell,
+                solved=False,
+                score=0.0,
+                final_answer_text="",
+                turns=0,
+                failure_reason=f"bootstrap_error: {type(exc).__name__}: {exc}",
+                wall_seconds=time.perf_counter() - started,
+                op_counts={
+                    "command": 0, "export": 0,
+                    "export_string": 0, "done": 0,
+                },
+                metadata={
+                    "scheme": "shell",
+                    "client": client.name,
+                    "benchmark": suite.name,
+                    "L": cell.L,
+                },
+            )
     runner = ShellRunner(root=root, timeout_s=cell.command_timeout_s)
     cap = CostCap(max_tokens=cell.cost_cap_tokens)
 
@@ -299,9 +340,28 @@ def run_shell_cell(
     except Exception as exc:
         failure_reason = f"harness_error: {type(exc).__name__}: {exc}"
 
-    # Score against user_output/.
+    # Score against user_output/ — or, if the caller hooked it, against
+    # whatever string `after_last_turn` returns.
     user_files = fs.list_user_outputs()
-    scoring_text = _read_user_outputs_for_scoring(user_files)
+    default_scoring_text = _read_user_outputs_for_scoring(user_files)
+    scoring_text = default_scoring_text
+    if after_last_turn is not None:
+        try:
+            preliminary = ShellCellResult(
+                cell=cell,
+                solved=False,
+                score=0.0,
+                final_answer_text=default_scoring_text,
+                turns=turn,
+            )
+            override = after_last_turn(fs, preliminary)
+            if isinstance(override, str):
+                scoring_text = override
+        except Exception as exc:
+            failure_reason = (
+                failure_reason
+                or f"after_last_turn_error: {type(exc).__name__}: {exc}"
+            )
     solved, score = suite.score(task, scoring_text)
     final_answer = scoring_text or ""
 

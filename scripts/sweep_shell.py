@@ -4,6 +4,16 @@ Mirrors `sweep_stateless.py` but uses `ShellCell` + `run_shell_cell`.
 JSONL output schema is structurally compatible with the stateless-turn
 output (same cell.provider / cell.benchmark / cell.L fields, same
 solved/score/turns/tokens), so analyze.py works against either.
+
+Two routing modes per benchmark:
+
+  - `--use-swe-bench-cell` (default: auto)  Use the SWE-bench wrapper
+    that bootstraps the repo into the agent filesystem and extracts the
+    final patch. Auto-enabled when the benchmark name starts with
+    "swe_bench"; can be forced on/off explicitly.
+
+Optional S3 sync: set --s3-bucket or GOLDFISH_S3_BUCKET to enable. The
+JSONL is uploaded every --s3-sync-every (default 10) completed cells.
 """
 
 from __future__ import annotations
@@ -18,8 +28,9 @@ from typing import Any, Iterable
 
 from rlm_paged.bench import build_suite
 from rlm_paged.client import build_client
-from rlm_paged.shell import ShellCell, run_shell_cell
+from rlm_paged.shell import ShellCell, run_shell_cell, run_swe_bench_cell
 from rlm_paged.utils.config import load_config
+from rlm_paged.utils.s3_sync import S3Syncer
 
 
 def _provider_spec_and_kwargs(entry: Any) -> tuple[str, dict[str, Any]]:
@@ -66,6 +77,14 @@ def _expand(
                 yield spec, kwargs, 0, bench_name, bench_kwargs or {}
 
 
+def _is_swe_bench(bench_name: str, override: str) -> bool:
+    if override == "yes":
+        return True
+    if override == "no":
+        return False
+    return bench_name.startswith("swe_bench")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/sweep/phase1.yaml")
@@ -73,11 +92,27 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit-tasks", type=int, default=None)
     parser.add_argument("--only-provider", default=None)
+    parser.add_argument("--only-benchmark", default=None)
     parser.add_argument(
         "--keep-agent-dirs",
         action="store_true",
         help="Keep per-trajectory agent directories on disk for inspection.",
     )
+    parser.add_argument(
+        "--use-swe-bench-cell",
+        choices=("auto", "yes", "no"),
+        default="auto",
+        help="Route SWE-bench trajectories through run_swe_bench_cell.",
+    )
+    parser.add_argument(
+        "--repo-cache-dir",
+        default=None,
+        help="Local cache of cloned repos shared across SWE-bench tasks.",
+    )
+    # ---------- S3 sync flags
+    parser.add_argument("--s3-bucket", default=None)
+    parser.add_argument("--s3-prefix", default=None)
+    parser.add_argument("--s3-sync-every", type=int, default=None)
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -85,13 +120,37 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     done = _read_done_keys(output_path)
 
+    syncer = S3Syncer.from_env_or_args(
+        bucket=args.s3_bucket,
+        prefix=args.s3_prefix,
+        sync_every=args.s3_sync_every,
+    )
+    if syncer.enabled:
+        try:
+            syncer.start()
+            print(
+                f"S3 sync enabled: s3://{syncer.bucket}/{syncer.prefix} "
+                f"every {syncer.sync_every} cells",
+                file=sys.stderr,
+            )
+        except RuntimeError as exc:
+            print(
+                f"warning: S3 sync requested but disabled: {exc}",
+                file=sys.stderr,
+            )
+            syncer.enabled = False
+
     cells_planned = 0
     cells_done = 0
     cells_skipped = 0
     cells_failed = 0
 
+    repo_cache = Path(args.repo_cache_dir) if args.repo_cache_dir else None
+
     for spec, prov_kwargs, L, bench_name, bench_kwargs in _expand(config):
         if args.only_provider and spec != args.only_provider:
+            continue
+        if args.only_benchmark and bench_name != args.only_benchmark:
             continue
 
         suite_kwargs = dict(bench_kwargs)
@@ -114,6 +173,7 @@ def main() -> int:
             continue
 
         client = build_client(spec, **prov_kwargs)
+        use_swe_cell = _is_swe_bench(bench_name, args.use_swe_bench_cell)
 
         for task in tasks:
             cells_planned += 1
@@ -130,13 +190,23 @@ def main() -> int:
                 continue
 
             try:
-                result = run_shell_cell(
-                    cell,
-                    client=client,
-                    suite=suite,
-                    task=task,
-                    keep_agent_dir=args.keep_agent_dirs,
-                )
+                if use_swe_cell:
+                    result = run_swe_bench_cell(
+                        cell,
+                        client=client,
+                        suite=suite,
+                        task=task,
+                        repo_cache_dir=repo_cache,
+                        keep_agent_dir=args.keep_agent_dirs,
+                    )
+                else:
+                    result = run_shell_cell(
+                        cell,
+                        client=client,
+                        suite=suite,
+                        task=task,
+                        keep_agent_dir=args.keep_agent_dirs,
+                    )
             except Exception as exc:
                 cells_failed += 1
                 print(
@@ -157,6 +227,23 @@ def main() -> int:
                 f"turns={result.turns} "
                 f"cmds={result.commands_executed}"
             )
+
+            sync_result = syncer.maybe_sync([output_path])
+            if sync_result and sync_result.files_uploaded:
+                print(
+                    f"  s3-sync: {sync_result.files_uploaded} files, "
+                    f"{sync_result.bytes_uploaded} bytes",
+                    file=sys.stderr,
+                )
+
+    # Final upload before exit (covers anything since the last periodic sync).
+    final = syncer.stop_and_final_sync([output_path]) if syncer.enabled else None
+    if final and final.files_uploaded:
+        print(
+            f"final s3-sync: {final.files_uploaded} files, "
+            f"{final.bytes_uploaded} bytes",
+            file=sys.stderr,
+        )
 
     print(
         f"\nshell sweep: planned={cells_planned} done={cells_done} "

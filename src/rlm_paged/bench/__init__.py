@@ -42,4 +42,7 @@ def build_suite(name: str, **kwargs) -> BenchSuite:
     if name == "arc_agi":
         from rlm_paged.bench.arc_agi import ArcAgiSuite
         return ArcAgiSuite(**kwargs)
+    if name in {"swe_bench_verified", "swe_bench"}:
+        from rlm_paged.bench.swe_bench import SweBenchVerifiedSuite
+        return SweBenchVerifiedSuite(**kwargs)
     raise ValueError(f"unknown benchmark: {name!r}")

@@ -23,6 +23,7 @@ from rlm_paged.shell.shell_runner_cell import (
     ShellCellResult,
     run_shell_cell,
 )
+from rlm_paged.shell.swe_bench_cell import run_swe_bench_cell
 from rlm_paged.shell.system_prompt import (
     SYSTEM_PROMPT_TEMPLATE,
     render_system_prompt,
@@ -42,4 +43,5 @@ __all__ = [
     "extract_shell_commands",
     "render_system_prompt",
     "run_shell_cell",
+    "run_swe_bench_cell",
 ]

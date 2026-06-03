@@ -1,0 +1,30 @@
+# SWE-bench Verified sweep config.
+#
+# Designed for the AWS cloud run. Uses the conservative scale agreed
+# with the operator: 3 OpenAI providers × 4 L values + native × 50 tasks
+# = ~750 trajectories.
+#
+# IMPORTANT: cost cap is 250k tokens/task because reasoning models
+# routinely spend 50–200k thinking tokens on long-horizon coding.
+
+sweep:
+  L_values: [128, 512, 2048, 8192]
+  include_native_baseline: true
+
+providers:
+  - openai:gpt-5
+  - spec: openai:o3-mini
+    kwargs:
+      reasoning_effort: high
+  - spec: openai:o4-mini
+    kwargs:
+      reasoning_effort: high
+
+benchmarks:
+  swe_bench_verified:
+    limit: 50
+    scorer_mode: subprocess
+    scorer_timeout_s: 1800.0
+
+cost_cap_tokens: 250000
+seeds: [0]
