@@ -73,6 +73,7 @@ class ShellCellResult:
     commands_intercepted: int = 0
     commands_failed: int = 0
     exports_written: int = 0
+    empty_done_retries: int = 0
     history_chars_end: int = 0
     user_output_files: int = 0
     wall_seconds: float = 0.0
@@ -227,7 +228,15 @@ def run_shell_cell(
         "export": 0,
         "export_string": 0,
         "done": 0,
+        "empty_done_retried": 0,
     }
+    # Bug 12 guard: if the model says `done` while user_output/ is empty
+    # (no files) OR every file in user_output/ is 0 bytes, refuse to
+    # terminate and append a nag to history. After this many retries
+    # we give up and let `done` go through anyway (so a genuinely
+    # impossible task can still terminate).
+    max_empty_done_retries = 2
+    empty_done_retries_used = 0
 
     turn = 0
     try:
@@ -318,6 +327,36 @@ def run_shell_cell(
                 # Normal shell command.
                 result = runner.run(cmd)
                 if result.intercepted_action in ("done", "exit"):
+                    # Bug 12: refuse to terminate if nothing has been
+                    # delivered. The model has a strong RLHF bias to
+                    # finish-and-deliver-something even when its output
+                    # is empty; prompt rules alone don't reliably stop
+                    # this. Refuse + nag + retry up to N times.
+                    files = fs.list_user_outputs()
+                    nonempty = [p for p in files if p.stat().st_size > 0]
+                    if not nonempty and empty_done_retries_used < max_empty_done_retries:
+                        empty_done_retries_used += 1
+                        op_counts["empty_done_retried"] += 1
+                        commands_intercepted += 1
+                        if not files:
+                            reason = "user_output/ is empty (no files exported)"
+                        else:
+                            reason = (
+                                "all files in user_output/ are 0 bytes: "
+                                + ", ".join(p.name for p in files)
+                            )
+                        fs.append_history(
+                            f"\n$ {cmd}\n"
+                            f"[done REFUSED] {reason}. "
+                            f"Re-do the work and EXPORT a real artifact "
+                            f"before issuing `done` again. "
+                            f"(retry {empty_done_retries_used}/{max_empty_done_retries})\n"
+                        )
+                        # Do NOT break — continue the loop, model gets
+                        # another turn. We still consider this `done`
+                        # as an emitted op for tallying.
+                        op_counts["done"] += 1
+                        continue
                     terminated_by_done = True
                     op_counts["done"] += 1
                     commands_intercepted += 1
@@ -378,6 +417,7 @@ def run_shell_cell(
         commands_intercepted=commands_intercepted,
         commands_failed=commands_failed,
         exports_written=exports_written,
+        empty_done_retries=empty_done_retries_used,
         history_chars_end=fs.history_path.stat().st_size if fs.history_path.exists() else 0,
         user_output_files=len(user_files),
         wall_seconds=time.perf_counter() - started,

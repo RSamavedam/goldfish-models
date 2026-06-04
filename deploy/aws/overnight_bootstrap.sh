@@ -30,7 +30,11 @@ say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 # Packages                                                              #
 # --------------------------------------------------------------------- #
 say "Installing system packages (dnf)…"
-sudo dnf install -y git docker python3.12 python3.12-pip jq tmux unzip
+# patch: AL2023 doesn't ship it by default; SWE-bench models reach for
+#        it to apply diffs. (Bug 11.)
+# nl, less, more: handy text utilities models try; harmless to include.
+sudo dnf install -y git docker python3.12 python3.12-pip jq tmux unzip \
+                     patch less coreutils
 sudo systemctl enable --now docker
 sudo usermod -aG docker ec2-user
 

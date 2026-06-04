@@ -120,9 +120,17 @@ the underlying work was correct.
      file (`echo "idea" >> notes.txt`), not in your visible response.
 
   1. **Always `export` before `done`.** `done` scores user_output/ as
-     it stands. If user_output/ is empty, the score is 0. Period. No
-     exceptions. If you discover you forgot to export, do so BEFORE
-     `done`, even if your patch is in a different file.
+     it stands. If user_output/ is empty OR every file there is 0
+     bytes, the harness will REFUSE your `done` and tell you to fix
+     it (with up to 2 retry turns before giving up). To avoid wasted
+     retries, ALWAYS check the artifact is non-empty before saying
+     `done`:
+
+         ```bash
+         wc -c user_output/*
+         # if any file is 0 bytes you have NOT delivered; fix and
+         # re-export before saying done.
+         ```
 
   1a. **Never emit placeholder strings in shell commands.** If you
       write `sed -n '1,200p' repo/<path>/file.py`, the shell tries to
