@@ -89,8 +89,17 @@ LIMITS
     stat / wc / echo / printf / tr / sort / uniq / cut / sed / awk /
     diff / patch / mkdir / touch / rm / mv / cp / ln / chmod /
     python / python3 / node / bash / sh / git / pytest / tox / make /
-    tee / pwd / date / env (and a few more). Anything outside that
-    list errors with `[security] executable not in allowlist`.
+    tee / pwd / date / env / cd (and a few more). Anything outside
+    that list errors with `[security] executable not in allowlist`.
+  • Each command is a FRESH shell. `cd repo` on one line and then
+    `git diff` on the next will NOT diff inside repo — the second
+    command starts at the agent root again. ALWAYS chain related
+    commands with `&&`:
+        cd repo && git diff > /tmp/p.patch
+    or use built-in path flags (`git -C repo diff`, `pytest path/to/test`,
+    `python3 -C 'cwd' -c '...'`).
+  • Paths in command args: must be relative to the agent root, OR
+    absolute under `/tmp/...`. `/etc/`, `/home/`, etc. are rejected.
   • Heredocs work: `cat > foo.py <<'EOF' ... EOF` runs as one
     command, body preserved. Same with `python3 - <<PY ... PY` to
     embed scripts inline.

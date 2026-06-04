@@ -66,10 +66,13 @@ DEFAULT_ALLOWLIST: frozenset[str] = frozenset(
         "md5sum", "shasum", "sha1sum", "sha256sum", "base64", "xxd",
         # Misc useful
         "tee", "pwd", "date", "env", "yes", "true", "false",
-        # Shell built-ins for redirects / loops — these don't really
-        # exist as standalone binaries but pipelines that start with
-        # them must be allowed. We special-case in `_check_pipeline`.
-        ":",
+        # Shell built-ins for redirects / loops + cd. Each command
+        # subprocess is a fresh `sh -c`, so a bare `cd foo` has no
+        # effect on the next command — the model must chain
+        # `cd foo && cmd` or use `-C` style flags. Allowing `cd` here
+        # at least stops the harness from erroring on the (very
+        # common) `cd repo` opener.
+        ":", "cd",
     }
 )
 
@@ -211,19 +214,35 @@ class ShellRunner:
                 # It's an argument. Sanitize if it looks path-like.
                 self._check_arg(tok)
 
+    # Paths the model may legitimately reference in shell command args.
+    # MUST mirror AgentFS._EXPORT_ALLOWED_PREFIXES — having the export
+    # sandbox allow /tmp/* but the shell-arg sanitizer reject it (so the
+    # model can't write to /tmp in the first place) is a real footgun
+    # that bit us on smoke 3 + 4.
+    _ARG_ALLOWED_ABSOLUTE_PREFIXES = ("/tmp/",)
+
     def _check_arg(self, arg: str) -> None:
         # Strip shell-redirect glyphs that survived tokenization.
         cleaned = arg.lstrip("<>")
         if not cleaned:
             return
-        # Absolute paths only allowed inside root.
+        # Absolute paths: inside agent root OR under an allowed prefix.
         if cleaned.startswith("/"):
             try:
                 Path(cleaned).resolve().relative_to(self.root)
+                under_root = True
             except ValueError:
-                raise ShellSecurityError(
-                    f"absolute path outside agent root: {cleaned}"
-                )
+                under_root = False
+            if not under_root:
+                if not any(
+                    cleaned.startswith(p)
+                    for p in self._ARG_ALLOWED_ABSOLUTE_PREFIXES
+                ):
+                    raise ShellSecurityError(
+                        f"absolute path outside agent root or allowed "
+                        f"prefixes {self._ARG_ALLOWED_ABSOLUTE_PREFIXES}: "
+                        f"{cleaned}"
+                    )
         # Parent traversal disallowed.
         parts = Path(cleaned).parts
         if ".." in parts:
