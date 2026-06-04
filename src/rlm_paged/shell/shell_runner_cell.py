@@ -150,6 +150,7 @@ def run_shell_cell(
     keep_agent_dir: bool = False,
     before_first_turn: Callable[[Any], None] | None = None,
     after_last_turn: Callable[[Any, "ShellCellResult"], str | None] | None = None,
+    turn_logger: Callable[[dict], None] | None = None,
 ) -> ShellCellResult:
     """Run one trajectory under the shell-harness architecture.
 
@@ -284,6 +285,35 @@ def run_shell_cell(
 
             response, _ = _truncate_response_to_k(gen.text, k)
             fs.write_stdout(turn, response)
+
+            # Per-turn transcript log: gives downstream analysis access to
+            # exactly what the model saw and wrote. The harness driver
+            # provides a callback that appends each row to runs/turns.jsonl
+            # (or wherever it wants). On-error in the callback we never
+            # let the trajectory crash — log failures are best-effort.
+            if turn_logger is not None:
+                try:
+                    turn_logger({
+                        "cell_key": (
+                            f"{cell.provider}|shell|{cell.L}|{cell.benchmark}|"
+                            f"{cell.task_id}|{cell.seed}"
+                        ),
+                        "provider": cell.provider,
+                        "benchmark": cell.benchmark,
+                        "task_id": cell.task_id,
+                        "L": cell.L,
+                        "turn": turn,
+                        "system_prompt": system_prompt,
+                        "user_prompt": prompt,
+                        "response": response,
+                        "thinking_text": gen.thinking_text or "",
+                        "input_tokens": gen.input_tokens,
+                        "output_tokens": gen.output_tokens,
+                        "thinking_tokens": gen.thinking_tokens,
+                        "finish_reason": gen.finish_reason,
+                    })
+                except Exception:
+                    pass
 
             # Append the model's response to history before running cmds.
             fs.append_history(

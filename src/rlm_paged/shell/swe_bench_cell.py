@@ -28,6 +28,7 @@ recommended for the cloud sweep.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from rlm_paged.bench.base import BenchSuite, BenchTask
 from rlm_paged.bench.swe_bench import (
@@ -51,6 +52,7 @@ def run_swe_bench_cell(
     task: BenchTask,
     repo_cache_dir: Path | None = None,
     keep_agent_dir: bool = False,
+    turn_logger: Callable[[dict], None] | None = None,
 ) -> ShellCellResult:
     """Run one SWE-bench trajectory under the shell harness.
 
@@ -87,4 +89,5 @@ def run_swe_bench_cell(
         keep_agent_dir=keep_agent_dir,
         before_first_turn=_bootstrap,
         after_last_turn=_extract_patch,
+        turn_logger=turn_logger,
     )

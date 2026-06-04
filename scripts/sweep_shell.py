@@ -109,6 +109,16 @@ def main() -> int:
         default=None,
         help="Local cache of cloned repos shared across SWE-bench tasks.",
     )
+    parser.add_argument(
+        "--turn-log",
+        default=None,
+        help=(
+            "If set, write a per-turn transcript JSONL here. One row per "
+            "model call with system_prompt + user_prompt + response + "
+            "token counts. Lets downstream analysis see exactly what the "
+            "model saw and wrote."
+        ),
+    )
     # ---------- S3 sync flags
     parser.add_argument("--s3-bucket", default=None)
     parser.add_argument("--s3-prefix", default=None)
@@ -146,6 +156,28 @@ def main() -> int:
     cells_failed = 0
 
     repo_cache = Path(args.repo_cache_dir) if args.repo_cache_dir else None
+
+    # Per-turn transcript logger. Append-only JSONL, one row per turn.
+    # Closure captures the file handle and serializes each row as a
+    # standalone JSON line; the harness invokes this callback after each
+    # API call. Best-effort: an exception in the callback never aborts
+    # the trajectory.
+    turn_log_fh = None
+    turn_logger = None
+    if args.turn_log:
+        turn_log_path = Path(args.turn_log)
+        turn_log_path.parent.mkdir(parents=True, exist_ok=True)
+        turn_log_fh = turn_log_path.open("a", encoding="utf-8")
+
+        def _turn_logger(row: dict) -> None:
+            turn_log_fh.write(json.dumps(row, default=str) + "\n")
+            turn_log_fh.flush()
+
+        turn_logger = _turn_logger
+        print(
+            f"Per-turn transcripts: {turn_log_path}",
+            file=sys.stderr,
+        )
 
     for spec, prov_kwargs, L, bench_name, bench_kwargs in _expand(config):
         if args.only_provider and spec != args.only_provider:
@@ -200,6 +232,7 @@ def main() -> int:
                         task=task,
                         repo_cache_dir=repo_cache,
                         keep_agent_dir=args.keep_agent_dirs,
+                        turn_logger=turn_logger,
                     )
                 else:
                     result = run_shell_cell(
@@ -208,6 +241,7 @@ def main() -> int:
                         suite=suite,
                         task=task,
                         keep_agent_dir=args.keep_agent_dirs,
+                        turn_logger=turn_logger,
                     )
             except Exception as exc:
                 cells_failed += 1
@@ -246,6 +280,9 @@ def main() -> int:
             f"{final.bytes_uploaded} bytes",
             file=sys.stderr,
         )
+
+    if turn_log_fh is not None:
+        turn_log_fh.close()
 
     print(
         f"\nshell sweep: planned={cells_planned} done={cells_done} "
