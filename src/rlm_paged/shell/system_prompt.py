@@ -122,9 +122,21 @@ the underlying work was correct.
      If the last file shown is the actual artifact you mean to deliver,
      proceed with `done`. Otherwise, fix it first.
 
-  4. **One artifact, not many.** Multiple `export`s are allowed, but the
+  4. **Watch for `[export error]` lines in history.** If your `export`
+     was rejected (file not found, path outside the sandbox, etc.) the
+     harness writes `[export error] <reason>` to history.txt for that
+     command. user_output/ will still be empty. ALWAYS scan the
+     immediately-prior history for an export-error line before saying
+     `done`. If you see one, fix the path and re-export.
+
+  5. **One artifact, not many.** Multiple `export`s are allowed, but the
      scorer reads them all concatenated, newest last. Prefer a single
      definitive export of the final artifact.
+
+  6. **Allowed export paths.** `export <path>` accepts either a path
+     INSIDE the agent root (e.g. `export repo/answer.patch`) or an
+     absolute path under `/tmp/` (e.g. `export /tmp/answer.patch`).
+     Any other absolute path is rejected.
 
 RECOMMENDED PATTERNS
 ====================

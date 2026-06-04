@@ -83,6 +83,40 @@ def test_export_missing_file_raises(fs):
         fs.export("nope.txt")
 
 
+def test_export_accepts_tmp_paths(fs, tmp_path):
+    """Regression: the SWE-bench prompt instructs models to
+    `git diff > /tmp/answer.patch && export /tmp/answer.patch`. The
+    first cloud sweep silently rejected those exports because all
+    absolute paths were forbidden. This test pins the new policy."""
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False, dir="/tmp") as fh:
+        fh.write("--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n")
+        src = fh.name
+    try:
+        dest = fs.export(src)
+        assert dest.parent == fs.user_output_dir
+        assert "+new" in dest.read_text()
+    finally:
+        import os
+        os.unlink(src)
+
+
+def test_export_rejects_tmp_parent_traversal(fs):
+    """`..` is still rejected even under /tmp."""
+    with pytest.raises(ValueError):
+        fs.export("/tmp/../etc/passwd")
+
+
+def test_export_rejects_other_absolute_paths(fs):
+    """Only /tmp/ is allowed; /etc/, /home/, /var/ etc. remain rejected."""
+    with pytest.raises(ValueError):
+        fs.export("/etc/passwd")
+    with pytest.raises(ValueError):
+        fs.export("/home/ec2-user/secret")
+    with pytest.raises(ValueError):
+        fs.export("/var/log/messages")
+
+
 def test_list_user_outputs_orders_by_mtime(fs):
     import os
     import time

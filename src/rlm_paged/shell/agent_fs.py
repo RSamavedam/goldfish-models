@@ -135,7 +135,7 @@ class AgentFS:
             dest = self.user_output_dir / f"export-{n:04d}.txt"
             dest.write_text(source, encoding="utf-8")
             return dest
-        src_path = self._resolve_internal(source)
+        src_path = self._resolve_export_source(source)
         if not src_path.exists():
             raise FileNotFoundError(f"export source not found: {source}")
         dest = self.user_output_dir / src_path.name
@@ -178,21 +178,64 @@ class AgentFS:
     # ----------------------------------------------------- safety
 
     def _resolve_internal(self, relpath: str) -> Path:
-        """Resolve a path that should live inside the agent root.
+        """Strict path resolution: must live inside the agent root.
 
         Raises ValueError if the resolved path escapes the root or contains
-        path-escape attempts.
+        path-escape attempts. Used for routine harness writes (history,
+        stdin, stdout) where there's no legitimate reason to touch
+        anything outside the root.
         """
         if relpath.startswith("/"):
             raise ValueError(f"absolute paths not allowed: {relpath!r}")
         if ".." in Path(relpath).parts:
             raise ValueError(f"parent-traversal not allowed: {relpath!r}")
         resolved = (self.root / relpath).resolve()
-        # Confirm it's under root after resolution.
         try:
             resolved.relative_to(self.root)
         except ValueError as exc:
             raise ValueError(f"path escapes agent root: {relpath!r}") from exc
+        return resolved
+
+    # Paths the model may legitimately export from. The agent root is
+    # obviously allowed (model wrote a file inside its working dir). /tmp
+    # is allowed because the model is encouraged to use /tmp as a scratch
+    # space for in-flight artifacts like generated patches — see the
+    # SWE-bench prompt's canonical pattern. Anything else is rejected.
+    _EXPORT_ALLOWED_PREFIXES = ("/tmp/",)
+
+    def _resolve_export_source(self, source: str) -> Path:
+        """Permissive resolution used only by `export(is_string=False)`.
+
+        Accepts:
+          - Paths relative to the agent root (treated as inside-root).
+          - Absolute paths starting with `/tmp/...` (process-private
+            scratch).
+        Rejects everything else with ValueError.
+        """
+        if source.startswith("/"):
+            for allowed in self._EXPORT_ALLOWED_PREFIXES:
+                if source.startswith(allowed):
+                    p = Path(source).resolve()
+                    # No `..` chicanery in /tmp either.
+                    try:
+                        p.relative_to(Path(allowed).resolve())
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"export path escapes {allowed}: {source!r}"
+                        ) from exc
+                    return p
+            raise ValueError(
+                f"absolute paths not allowed except under {self._EXPORT_ALLOWED_PREFIXES}: {source!r}"
+            )
+        if ".." in Path(source).parts:
+            raise ValueError(f"parent-traversal not allowed: {source!r}")
+        resolved = (self.root / source).resolve()
+        try:
+            resolved.relative_to(self.root)
+        except ValueError as exc:
+            raise ValueError(
+                f"path escapes agent root: {source!r}"
+            ) from exc
         return resolved
 
     # ----------------------------------------------------- teardown
