@@ -237,6 +237,14 @@ def run_shell_cell(
     # impossible task can still terminate).
     max_empty_done_retries = 2
     empty_done_retries_used = 0
+    # Bug 13 guard: if the model produces N consecutive turns with NO
+    # fenced shell commands (just prose), the trajectory is wedged.
+    # Smoke 6 caught o4-mini stuck in this state burning $100k+ tokens
+    # in empty responses. Force-terminate so we don't spend money on
+    # garbage. Counter resets whenever the model emits at least one
+    # command (or export, or done).
+    max_consecutive_empty_turns = 4
+    consecutive_empty_turns = 0
 
     turn = 0
     try:
@@ -291,6 +299,23 @@ def run_shell_cell(
             )
 
             commands = extract_shell_commands(response)
+
+            # Bug 13: track consecutive empty turns and force-terminate
+            # if the model is wandering with no actions.
+            if not commands:
+                consecutive_empty_turns += 1
+                if consecutive_empty_turns >= max_consecutive_empty_turns:
+                    failure_reason = (
+                        f"wandering: {consecutive_empty_turns} consecutive "
+                        "turns with no shell commands"
+                    )
+                    fs.append_history(
+                        f"\n[harness] terminating: {consecutive_empty_turns} "
+                        f"consecutive empty turns\n"
+                    )
+                    break
+            else:
+                consecutive_empty_turns = 0
 
             for cmd in commands:
                 cap_violation = False

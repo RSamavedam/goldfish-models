@@ -45,10 +45,10 @@ DEFAULT_ALLOWLIST: frozenset[str] = frozenset(
         # Search
         "grep", "egrep", "fgrep", "rg", "find",
         # Listing / inspection
-        "ls", "stat", "file", "wc", "tree",
+        "ls", "stat", "file", "wc", "tree", "nl", "od", "hexdump",
         # Transformation
         "echo", "printf", "tr", "sort", "uniq", "cut", "paste",
-        "sed", "awk", "diff", "patch", "cmp",
+        "sed", "awk", "diff", "patch", "cmp", "column",
         # File management within the root
         "mkdir", "touch", "rm", "mv", "cp", "ln", "chmod",
         # Interpreters (intentional — many benchmarks need code)
