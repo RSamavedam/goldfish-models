@@ -27,8 +27,8 @@ Required pre-flight (the operator's responsibility before `cdk deploy`):
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from textwrap import dedent
 
 import aws_cdk as cdk
 from aws_cdk import (
@@ -44,6 +44,30 @@ from constructs import Construct
 
 HERE = Path(__file__).resolve().parent
 BOOTSTRAP_DIR = HERE.parent / "bootstrap"
+
+
+# `cdk.Fn.sub` treats `${Name}` as a substitution variable. Anything else
+# of that shape in the template would also be interpreted. Our user-data
+# shell scripts use `${SHELL_VAR}` heavily, so we have to escape every
+# `${...}` *except* the ones we want CFN to substitute. CFN's literal
+# escape for `$` is `${!Var}`, so `${FOO}` -> `${!FOO}` keeps the literal
+# shell expansion intact while CFN keeps `${BucketName}` available.
+_DOLLAR_BRACE_RE = re.compile(r"\$\{([^!}][^}]*)\}")
+
+
+def _protect_shell_dollar_expansions(
+    template: str, *, allow: tuple[str, ...]
+) -> str:
+    """Escape `${VAR}` to `${!VAR}` except where VAR is in `allow`."""
+    allow_set = set(allow)
+
+    def repl(m: re.Match) -> str:
+        name = m.group(1)
+        if name in allow_set:
+            return m.group(0)
+        return "${!" + name + "}"
+
+    return _DOLLAR_BRACE_RE.sub(repl, template)
 
 
 class GoldfishSweepStack(Stack):
@@ -164,35 +188,70 @@ class GoldfishSweepStack(Stack):
             machine_image = ec2.MachineImage.latest_amazon_linux2023()
 
         # ---------- User data ---------------------------------------------
+        # IMPORTANT: We do template substitution in TWO stages because
+        # `bucket.bucket_name` is a CFN token (a deploy-time-resolved value),
+        # not a literal string at synth time. Plain str.replace breaks tokens
+        # by splitting them across the surrounding string. We use
+        # `cdk.Fn.sub` to do the bucket-name substitution at CFN-resolve
+        # time. All other placeholders are real strings at synth time and
+        # we substitute them with `str.replace` first.
         user_data_template = (BOOTSTRAP_DIR / "user_data.sh").read_text()
         run_sweep_template = (BOOTSTRAP_DIR / "run_sweep.sh").read_text()
 
-        # Substitute placeholders so the on-instance script has the right
-        # bucket name, repo URL, etc.
-        substitutions = {
-            "@@BUCKET_NAME@@": bucket.bucket_name,
+        literal_substitutions = {
             "@@REGION@@": self.region,
             "@@REPO_URL@@": repo_url,
             "@@REPO_REF@@": repo_ref,
             "@@STACK_NAME@@": construct_id,
             "@@SWEEP_ARGS@@": sweep_args,
         }
-        for placeholder, value in substitutions.items():
+        for placeholder, value in literal_substitutions.items():
             user_data_template = user_data_template.replace(placeholder, value)
             run_sweep_template = run_sweep_template.replace(placeholder, value)
 
-        # Embed run_sweep.sh INSIDE user_data.sh via a heredoc so the
-        # instance has a single bootstrap to execute.
-        full_user_data = user_data_template + "\n\n" + dedent(f"""
-            # ----- written by CDK: run_sweep.sh ---------------------------
-            cat > /home/ec2-user/run_sweep.sh <<'GOLDFISH_RUN_SWEEP_EOF'
-            {run_sweep_template}
-            GOLDFISH_RUN_SWEEP_EOF
-            chmod +x /home/ec2-user/run_sweep.sh
-            chown ec2-user:ec2-user /home/ec2-user/run_sweep.sh
-        """).strip()
+        # Embed run_sweep.sh INSIDE user_data.sh via a heredoc. The
+        # heredoc body must NOT be indented or shell parses the indent
+        # as part of the file contents. CRITICALLY, the embedding must
+        # happen at the @@RUN_SWEEP_EMBED@@ placeholder — which appears
+        # in user_data.sh BEFORE the `tmux new-session` line, so the
+        # file exists when tmux tries to source it. Appending after
+        # the user_data body would put the heredoc after the `exit 0`
+        # at the end of user_data.sh, which never runs.
+        if "@@RUN_SWEEP_EMBED@@" not in user_data_template:
+            raise RuntimeError(
+                "user_data.sh template is missing the @@RUN_SWEEP_EMBED@@ "
+                "placeholder; tmux launch will reference a missing file."
+            )
+        embedded = (
+            "cat > /home/ec2-user/run_sweep.sh <<'GOLDFISH_RUN_SWEEP_EOF'\n"
+            f"{run_sweep_template}"
+            f"{'' if run_sweep_template.endswith(chr(10)) else chr(10)}"
+            "GOLDFISH_RUN_SWEEP_EOF"
+        )
+        full_template = user_data_template.replace(
+            "@@RUN_SWEEP_EMBED@@", embedded
+        )
 
-        user_data = ec2.UserData.custom(full_user_data)
+        # Now substitute @@BUCKET_NAME@@ via Fn::Sub so CFN resolves the
+        # bucket-name token at deploy time. cdk.Fn.sub takes a string with
+        # `${VarName}` placeholders + a dict of variable bindings.
+        substituted_template = full_template.replace(
+            "@@BUCKET_NAME@@", "${BucketName}"
+        )
+        # Escape any literal `${...}` already in the template so CFN
+        # doesn't try to interpret them. Easiest correct way: encode `$`
+        # outside our placeholder. The user_data shell scripts use a LOT
+        # of `${...}` shell expansions, so this matters — we have to
+        # protect each one as `${!...}` (CFN's literal-dollar escape).
+        protected = _protect_shell_dollar_expansions(
+            substituted_template, allow=("BucketName",)
+        )
+        user_data_value = cdk.Fn.sub(
+            protected,
+            {"BucketName": bucket.bucket_name},
+        )
+
+        user_data = ec2.UserData.custom(user_data_value)
 
         # ---------- The instance -------------------------------------------
         instance = ec2.Instance(

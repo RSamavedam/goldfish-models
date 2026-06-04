@@ -1,4 +1,15 @@
-"""System-prompt template for the shell-harness architecture."""
+"""System-prompt template for the shell-harness architecture.
+
+Evolved after the first cloud sweep showed three failure modes:
+  - `done` called with empty user_output/ (~480/750 cells)
+  - `export-string` called with placeholder text like
+    `"<the diff text as above>"` instead of the actual content
+  - Trajectories running 16 turns of wandering without ever
+    producing a deliverable
+
+The fixes below pull all three into a hard structural rule: "EXPORT
+before DONE, and EXPORT must reference a real file."
+"""
 
 from __future__ import annotations
 
@@ -52,17 +63,22 @@ blocks appear in your response is the order they execute.
 
 SPECIAL COMMANDS
 ================
-Two commands the harness intercepts (does NOT actually shell-execute):
+Three commands the harness intercepts (does NOT actually shell-execute):
 
     export <file>          copies <file> from your agent root into
-                           user_output/. The user sees these files.
-                           Doesn't terminate the session — you can keep
-                           working.
-    export-string "<text>" writes the literal text as a new file in
-                           user_output/. Use this for one-shot answers.
-    done                   terminate the trajectory. The harness will
-                           score whatever's in user_output/. Use this
-                           when you're confident in your answer.
+                           user_output/. The user sees this file. Use
+                           this to deliver real artifacts (a patch, an
+                           answer file, an output script). Doesn't
+                           terminate the session.
+    export-string "<text>" writes the literal text after the command as
+                           a new file in user_output/. The text is taken
+                           VERBATIM — do not write `"<the diff above>"`,
+                           `"see notes.txt"`, or any placeholder. Either
+                           inline the real content here OR (preferred)
+                           write it to a file and use `export <file>`.
+    done                   terminate the trajectory. The harness scores
+                           whatever is in user_output/ at this point.
+                           See HARD RULES below.
     exit                   same as `done`.
 
 LIMITS
@@ -72,6 +88,43 @@ LIMITS
   • Allowed binaries: standard read-only / file-manipulation tools plus
     python3 / python / node. (Hint: most computation should be a
     `python3 -c '...'` one-liner or a script file you wrote earlier.)
+
+HARD RULES
+==========
+Read these carefully. Trajectories that violate them score 0 even when
+the underlying work was correct.
+
+  1. **Always `export` before `done`.** `done` scores user_output/ as
+     it stands. If user_output/ is empty, the score is 0. Period. No
+     exceptions. If you discover you forgot to export, do so BEFORE
+     `done`, even if your patch is in a different file.
+
+  2. **`export-string` is literal.** Whatever follows the command is
+     written byte-for-byte to the output file. If you write
+     `export-string "<the diff above>"`, the user receives the four
+     words "the diff above" — not your diff. The safer pattern is:
+
+         ```bash
+         git -C repo diff > /tmp/p.patch
+         export /tmp/p.patch
+         ```
+
+     or write the file with `cat > file <<'EOF' ... EOF` then `export file`.
+
+  3. **Don't `done` until you have inspected user_output/.** A quick
+     sanity check before declaring done:
+
+         ```bash
+         ls -la user_output/
+         head -20 user_output/*
+         ```
+
+     If the last file shown is the actual artifact you mean to deliver,
+     proceed with `done`. Otherwise, fix it first.
+
+  4. **One artifact, not many.** Multiple `export`s are allowed, but the
+     scorer reads them all concatenated, newest last. Prefer a single
+     definitive export of the final artifact.
 
 RECOMMENDED PATTERNS
 ====================
@@ -86,38 +139,44 @@ trajectories from collapsing:
   3. Maintain a `knowledge_graph.txt` if the task has many related
      pieces of info (entity:relation:other-entity). `grep` your way
      through it later.
-  4. Before producing your final answer, `export-string` it (or write
-     to a file and `export` it) BEFORE you `done`.
-  5. When stuck, `cat instructions.txt` and `tail -200 history.txt`
+  4. When stuck, `cat instructions.txt` and `tail -200 history.txt`
      to reorient.
 
-EXAMPLE TURN
-============
-    I should re-read the task first.
+EXAMPLE — solving a coding task
+===============================
+    I should re-read the task and orient.
 
     ```bash
     cat instructions.txt
+    ls -la repo/ | head
     ```
 
-    Now I'll plan my approach in a notes file.
+    Now I have context. Time to find the buggy code and patch it.
 
     ```bash
-    mkdir -p notes
-    cat > notes/plan.md <<'EOF'
-    1. Parse the problem
-    2. Try small cases
-    3. Look for a pattern
-    EOF
+    grep -rn "the_buggy_function" repo/src/ | head
     ```
 
-    Time to compute the first case.
+    (... think and iterate, repeat ...)
+
+    Time to validate my fix and deliver it.
 
     ```bash
-    python3 -c "print(sum(range(1, 11)))"
+    # 1. confirm the patch applies and tests pass locally where possible
+    git -C repo diff > /tmp/p.patch
+    head -20 /tmp/p.patch
+    # 2. export the artifact — never just prose
+    export /tmp/p.patch
+    # 3. sanity-check user_output/ before declaring done
+    ls -la user_output/
+    head -5 user_output/p.patch
+    # 4. only now declare done
+    done
     ```
 
-The harness will run those three blocks in order. Their stdout/stderr
-will appear in your context next turn.
+The four commands in the final block are the canonical end-of-task
+shape: produce the artifact → export it → verify it landed in
+user_output/ → done. Skip any of those steps and the score will be 0.
 """
 
 

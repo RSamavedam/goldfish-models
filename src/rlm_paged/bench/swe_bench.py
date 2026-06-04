@@ -47,6 +47,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -62,10 +63,35 @@ REPOSITORY: {repo}
 COMMIT:     {base_commit}
 
 The repository is checked out at the above commit in your agent root,
-under `./repo/`. Your task is to read the issue below, make code changes
-inside `./repo/`, and validate your fix locally. When you are confident,
-`export` a unified-diff patch (or write one to `./answer.patch` and
-`export answer.patch`) and call `done`.
+under `./repo/`.
+
+WHAT YOU MUST DELIVER
+=====================
+The scorer expects ONE thing: a unified-diff patch in user_output/.
+The canonical way to produce it:
+
+    ```bash
+    # 1. Make your edits inside ./repo/ (using sed, python, or by
+    #    `cat > file <<EOF` heredocs — any way to mutate the source).
+
+    # 2. When you believe the fix is right, generate the patch:
+    git -C repo diff > /tmp/answer.patch
+
+    # 3. Sanity-check the diff is non-empty and points at the files
+    #    you actually changed:
+    wc -l /tmp/answer.patch
+    head -20 /tmp/answer.patch
+
+    # 4. Export and finish:
+    export /tmp/answer.patch
+    done
+    ```
+
+The scorer runs the project's hidden test suite against this patch.
+NO patch in user_output/ means the score is 0 even if you understood
+the bug perfectly. DO NOT use `export-string` with a description like
+"the diff above" — the scorer will read those literal words as your
+patch and reject it.
 
 PROBLEM STATEMENT
 =================
@@ -75,18 +101,21 @@ PROBLEM STATEMENT
 
 GROUND-TRUTH TESTS
 ==================
-After you finish, the harness will run a held-out set of tests we are
-NOT showing you. Some currently fail; your patch must make them pass
-without breaking tests that currently pass. The hidden tests are
-described informally in the problem statement above.
+The harness will run a held-out set of tests we are NOT showing you.
+Some currently fail; your patch must make them pass without breaking
+tests that currently pass. The problem statement above describes those
+tests informally.
 
-Files you may want to look at:
-  - `./repo/README*` or `./repo/docs/` for context
-  - `./repo/CONTRIBUTING*` or `./repo/HACKING*` for testing conventions
-  - `git log --oneline -20` inside `./repo/` to see recent activity
+USEFUL EXPLORATION COMMANDS
+===========================
+  - `ls -la repo/` to see the top-level layout
+  - `cat repo/README*` or `cat repo/docs/index.*` for orientation
+  - `cat repo/CONTRIBUTING*` for testing conventions
+  - `git -C repo log --oneline -20` to see recent activity
+  - `grep -rn 'symbol_name' repo/src/` to find relevant code
 
-You can run tests with the project's usual test runner (often `pytest`
-inside `./repo/`). Keep iterations small; the cost cap is real.
+You can run tests with `pytest` inside `./repo/` if the project uses
+pytest. Keep iterations small; the cost cap is real.
 """
 
 
@@ -227,8 +256,14 @@ class SweBenchVerifiedSuite(BenchSuite):
 
             log_dir = tmp / "logs"
             log_dir.mkdir()
+            # Use sys.executable, not the bare string "python" — Amazon
+            # Linux 2023 (and many minimal distros) ship `python3` only,
+            # no `python` symlink, and bare "python" raises
+            # FileNotFoundError. The exception handler below used to
+            # silently treat that as "swebench not installed", which is
+            # how the first cloud sweep scored every patch False.
             cmd = [
-                "python", "-m", "swebench.harness.run_evaluation",
+                sys.executable, "-m", "swebench.harness.run_evaluation",
                 "--predictions_path", str(predictions_path),
                 "--max_workers", "1",
                 "--run_id", f"goldfish-{instance_id}",
@@ -246,9 +281,19 @@ class SweBenchVerifiedSuite(BenchSuite):
                     timeout=self.scorer_timeout_s,
                 )
             except subprocess.TimeoutExpired:
+                # Write a sibling debug file so a stuck scorer is
+                # diagnosable from the JSONL rerun later.
+                (tmp / "_scorer_timeout").write_text(
+                    f"timeout after {self.scorer_timeout_s}s\n"
+                )
                 return False, 0.0
-            except FileNotFoundError:
-                # `swebench` not installed on the host; degrade to dry_run.
+            except FileNotFoundError as exc:
+                # Almost certainly swebench is genuinely missing — but
+                # we no longer hide it, since the bare "python" mistake
+                # would mask real environment failures.
+                (tmp / "_scorer_not_installed").write_text(
+                    f"FileNotFoundError: {exc}\n"
+                )
                 return False, 0.0
 
             verdict, score = _read_swebench_report(log_dir, instance_id)

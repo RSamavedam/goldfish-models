@@ -1,0 +1,242 @@
+{
+  "/goldfish-sweep": [
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/SsmParameterValue:--aws--service--ami-amazon-linux-latest--al2023-ami-kernel-6.1-x86_64:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "SsmParameterValueawsserviceamiamazonlinuxlatestal2023amikernel61x8664C96584B6F00A464EAD1953AFF4B05118Parameter"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Instance2 in aws-cdk-lib...",
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)"
+      ]
+    }
+  ],
+  "/goldfish-sweep/BucketName": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BucketName"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/InstanceId": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "InstanceId"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/SessionManagerCommand": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "SessionManagerCommand"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/TailLogsCommand": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "TailLogsCommand"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/BootstrapVersion": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BootstrapVersion"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...App.synth in aws-cdk-lib...",
+        "/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:542 (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:5429)"
+      ]
+    }
+  ],
+  "/goldfish-sweep/CheckBootstrapVersion": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CheckBootstrapVersion"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...App.synth in aws-cdk-lib...",
+        "/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:542 (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:5429)"
+      ]
+    }
+  ],
+  "/goldfish-sweep/OutputBucket/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "OutputBucket7114EB27"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Bucket2 in aws-cdk-lib...",
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/InstanceRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "InstanceRole3CCE2F1D"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Role2 in aws-cdk-lib...",
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/InstanceSecurityGroup/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "InstanceSecurityGroup896E10BF"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new SecurityGroup2 in aws-cdk-lib...",
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/SweepInstance/InstanceProfile": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "SweepInstanceInstanceProfileB3BB86C9"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Instance2 in aws-cdk-lib...",
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/SweepInstance/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "SweepInstance7DC75E8D"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Instance2 in aws-cdk-lib...",
+        "Kernel._Kernel_create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:61224)",
+        "Kernel.create (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:51955)",
+        "KernelHost.processRequest (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:212065)",
+        "KernelHost.run (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211120)",
+        "Immediate._onImmediate (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:211164)",
+        "...node internals..."
+      ]
+    }
+  ],
+  "/goldfish-sweep/CDKMetadata/Default": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CDKMetadata"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...App.synth in aws-cdk-lib...",
+        "/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:542 (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:5429)",
+        "Kernel._Kernel_ensureSync (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:69840)",
+        "Kernel.invoke (/private/var/folders/9f/hbc5gjps0bq5c9hc54brz6980000gn/T/tmpyq_jfq8o/lib/program.js:1:54245)"
+      ]
+    }
+  ],
+  "/goldfish-sweep/InstanceRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "InstanceRoleDefaultPolicy1531605C"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...aws-cdk-lib...",
+        "(no user code in 10 frames, use --stack-trace-limit to capture more)"
+      ]
+    }
+  ]
+}

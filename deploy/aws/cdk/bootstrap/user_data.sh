@@ -5,7 +5,8 @@
 #   2. Clones the goldfish-models repo at the configured ref.
 #   3. Installs Python deps + the swebench package.
 #   4. Pulls API keys + HF token from SSM Parameter Store into env files.
-#   5. Launches run_sweep.sh in a detached screen session so the run
+#   5. Writes run_sweep.sh to disk.
+#   6. Launches run_sweep.sh in a detached tmux session so the run
 #      survives if user_data.sh exits before it finishes.
 #
 # All output goes to /var/log/goldfish-sweep.log. Tail it via:
@@ -68,6 +69,16 @@ ssm_env=/home/ec2-user/.goldfish-env
 } > "${ssm_env}"
 chown ec2-user:ec2-user "${ssm_env}"
 chmod 600 "${ssm_env}"
+
+# ----- Write run_sweep.sh to disk ---------------------------------------
+# The substitution marker below is replaced by the CDK stack at synth
+# time with the full body of bootstrap/run_sweep.sh, wrapped in a
+# `cat > ... <<'EOF'` heredoc. It MUST appear before the tmux launch
+# below, otherwise tmux tries to source a script that doesn't exist.
+@@RUN_SWEEP_EMBED@@
+
+chown ec2-user:ec2-user /home/ec2-user/run_sweep.sh
+chmod +x /home/ec2-user/run_sweep.sh
 
 echo "===== bootstrap complete; handing off to run_sweep.sh ====="
 

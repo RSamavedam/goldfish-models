@@ -1,0 +1,21 @@
+{
+  "version": "53.0.0",
+  "files": {
+    "20e031af94e8603f8bf3b29cab1e7a6ade7ede470481ea31c2704d1eeaac7263": {
+      "displayName": "goldfish-sweep Template",
+      "source": {
+        "path": "goldfish-sweep.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "379262059078-us-east-2-1e3ce5e5": {
+          "bucketName": "cdk-hnb659fds-assets-379262059078-us-east-2",
+          "objectKey": "20e031af94e8603f8bf3b29cab1e7a6ade7ede470481ea31c2704d1eeaac7263.json",
+          "region": "us-east-2",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::379262059078:role/cdk-hnb659fds-file-publishing-role-379262059078-us-east-2"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

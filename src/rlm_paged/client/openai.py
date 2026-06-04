@@ -104,5 +104,21 @@ class OpenAIClient(LLMClient):
         )
 
     def _looks_like_reasoning_model(self) -> bool:
+        """Detects models that require `max_completion_tokens` instead of
+        `max_tokens` (and that reject explicit temperature/stop).
+
+        Covers:
+          - o1 / o3 / o4 reasoning families
+          - gpt-5 family (uses the responses-style parameter set even on
+            chat.completions)
+
+        Confirmed empirically: a sweep run with `gpt-5` returned 400
+        `Unsupported parameter: 'max_tokens'` until this matcher was
+        widened to include the gpt-5 prefix.
+        """
         m = self.model.lower()
-        return m.startswith("o1") or m.startswith("o3") or m.startswith("o4")
+        if m.startswith(("o1", "o3", "o4")):
+            return True
+        if m.startswith("gpt-5"):
+            return True
+        return False
