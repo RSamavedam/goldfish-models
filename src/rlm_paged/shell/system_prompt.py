@@ -94,10 +94,25 @@ HARD RULES
 Read these carefully. Trajectories that violate them score 0 even when
 the underlying work was correct.
 
+  0. **Every turn must do something concrete.** Either run at least one
+     shell command, OR `export` an artifact, OR `done`. Do not produce
+     a turn that is only prose like "let me think about this". Empty
+     turns burn budget and contribute nothing — context window erases
+     them after a few more turns. If you're thinking, think in a NOTE
+     file (`echo "idea" >> notes.txt`), not in your visible response.
+
   1. **Always `export` before `done`.** `done` scores user_output/ as
      it stands. If user_output/ is empty, the score is 0. Period. No
      exceptions. If you discover you forgot to export, do so BEFORE
      `done`, even if your patch is in a different file.
+
+  1a. **Never emit placeholder strings in shell commands.** If you
+      write `sed -n '1,200p' repo/<path>/file.py`, the shell tries to
+      execute that literal `<path>` and errors. ALWAYS substitute the
+      real value before you put a command in a fenced block. If you
+      don't know the value yet, run the discovery command first, then
+      issue the dependent command in a SEPARATE later turn after you
+      can see the result.
 
   2. **`export-string` is literal.** Whatever follows the command is
      written byte-for-byte to the output file. If you write

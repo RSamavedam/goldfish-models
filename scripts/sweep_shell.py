@@ -183,6 +183,8 @@ def main() -> int:
                 benchmark=bench_name,
                 task_id=task.task_id,
                 cost_cap_tokens=int(config.get("cost_cap_tokens", 100_000)),
+                max_turns=int(config.get("max_turns", 16)),
+                command_timeout_s=float(config.get("command_timeout_s", 10.0)),
             )
             key = _cell_key(cell)
             if key in done:

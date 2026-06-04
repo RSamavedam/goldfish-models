@@ -1,11 +1,4 @@
 # SWE-bench Verified sweep config.
-#
-# Designed for the AWS cloud run. Uses the conservative scale agreed
-# with the operator: 3 OpenAI providers × 4 L values + native × 50 tasks
-# = ~750 trajectories.
-#
-# IMPORTANT: cost cap is 250k tokens/task because reasoning models
-# routinely spend 50–200k thinking tokens on long-horizon coding.
 
 sweep:
   L_values: [128, 512, 2048, 8192]
@@ -26,5 +19,17 @@ benchmarks:
     scorer_mode: subprocess
     scorer_timeout_s: 1800.0
 
+# Cost cap is 250k tokens/task: reasoning models routinely spend 50-200k
+# thinking tokens on long-horizon coding.
 cost_cap_tokens: 250000
+
+# SWE-bench tasks routinely need 4 turns of exploration before the
+# model can land its first patch. Default 16 in ShellCell is too tight;
+# 32 lets the model recover from bad first attempts.
+max_turns: 32
+
+# Many real shell commands (git checkout, pytest, pip install) take
+# longer than 10s. 60s is the right SWE-bench default.
+command_timeout_s: 60.0
+
 seeds: [0]
