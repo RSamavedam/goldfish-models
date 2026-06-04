@@ -85,9 +85,18 @@ LIMITS
 ======
   • Response: at most {k} tokens.
   • Command timeout: {timeout_s}s per command.
-  • Allowed binaries: standard read-only / file-manipulation tools plus
-    python3 / python / node. (Hint: most computation should be a
-    `python3 -c '...'` one-liner or a script file you wrote earlier.)
+  • Allowed binaries: cat / head / tail / less / grep / find / ls /
+    stat / wc / echo / printf / tr / sort / uniq / cut / sed / awk /
+    diff / patch / mkdir / touch / rm / mv / cp / ln / chmod /
+    python / python3 / node / bash / sh / git / pytest / tox / make /
+    tee / pwd / date / env (and a few more). Anything outside that
+    list errors with `[security] executable not in allowlist`.
+  • Heredocs work: `cat > foo.py <<'EOF' ... EOF` runs as one
+    command, body preserved. Same with `python3 - <<PY ... PY` to
+    embed scripts inline.
+  • Do NOT use the `*** Begin Patch / *** End Patch / *** PATCH`
+    custom patch syntax — the shell doesn't know what those lines
+    are. Use real `git apply <file>` or `patch -p1 < file` instead.
 
 HARD RULES
 ==========

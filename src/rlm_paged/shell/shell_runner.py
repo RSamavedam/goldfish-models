@@ -50,17 +50,26 @@ DEFAULT_ALLOWLIST: frozenset[str] = frozenset(
         "echo", "printf", "tr", "sort", "uniq", "cut", "paste",
         "sed", "awk", "diff", "patch", "cmp",
         # File management within the root
-        "mkdir", "touch", "rm", "mv", "cp", "ln",
+        "mkdir", "touch", "rm", "mv", "cp", "ln", "chmod",
         # Interpreters (intentional — many benchmarks need code)
-        "python", "python3", "node",
+        "python", "python3", "node", "bash", "sh",
+        # Source control — critical for SWE-bench's `git diff` patch
+        # generation. The agent's repo is local and inside its root,
+        # so git can't escape the sandbox via repo ops; the path
+        # sanitizer still rejects `git clone https://evil` because
+        # the URL is just an argument.
+        "git",
+        # Test runners — SWE-bench tasks routinely need to validate
+        # patches by running the project's pytest suite.
+        "pytest", "tox", "make",
         # Hashing / encoding (useful for IDs)
         "md5sum", "shasum", "sha1sum", "sha256sum", "base64", "xxd",
         # Misc useful
-        "tee", "pwd", "date", "env",
+        "tee", "pwd", "date", "env", "yes", "true", "false",
         # Shell built-ins for redirects / loops — these don't really
         # exist as standalone binaries but pipelines that start with
         # them must be allowed. We special-case in `_check_pipeline`.
-        ":", "true", "false",
+        ":",
     }
 )
 
