@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from rlm_paged.bench.base import BenchSuite, BenchTask
+from rlm_paged.bench.swe_bench import _looks_like_unified_diff
 from rlm_paged.client.base import LLMClient
 from rlm_paged.client.tokenizer import count as token_count
 from rlm_paged.client.tokenizer import decode as token_decode
@@ -153,6 +154,33 @@ def _inject_position_markers(text: str, *, every: int, k: int) -> str:
         chunks.append(f"⟪{marker_pos}/{k}⟫")
     chunks.append(tail)
     return "".join(chunks)
+
+
+def _is_diff_locking_export(suite: BenchSuite, dest_path) -> bool:
+    """True iff this export should auto-terminate the trajectory.
+
+    Triggers when:
+      - the active suite is shaped like SWE-bench (has the addendum), AND
+      - the exported file's contents parse as a unified diff
+        (---/+++/@@ markers present, per _looks_like_unified_diff)
+
+    Empty exports and non-diff exports (test files, summaries, notes)
+    do NOT trigger — the model gets to keep trying. This is the safer
+    half of the "deliver and stop" rule: enforced by the harness for
+    valid attempts, not for garbage.
+    """
+    # Cheap suite-shape gate: SWE-bench-style suites return a non-None
+    # addendum. Lets us skip the diff check for benchmarks where exports
+    # are legitimately not diffs.
+    if suite.system_prompt_addendum() is None:
+        return False
+    try:
+        contents = dest_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    if not contents.strip():
+        return False
+    return _looks_like_unified_diff(contents)
 
 
 def _truncate_response_to_k(text: str, k: int) -> tuple[str, bool]:
@@ -416,6 +444,17 @@ def run_shell_cell(
 
             commands = extract_shell_commands(response)
 
+            # Auto-terminate hook: when an export produces a file whose
+            # contents look like a valid unified diff, lock it in and
+            # exit the trajectory. Prevents the "exported a good patch,
+            # then iterated and overwrote with a broken one" failure
+            # mode we watched in paper5/6. Set this flag during the
+            # command loop; the outer while loop checks it after each
+            # turn and breaks. Only applies when the task is shaped
+            # like SWE-bench (suite has the addendum). Other benchmarks
+            # may legitimately export multiple things or non-diffs.
+            export_locked_in = False
+
             for cmd in commands:
                 cap_violation = False
                 # Try the intercepts before any allowlist check.
@@ -429,6 +468,14 @@ def run_shell_cell(
                     op_counts["export_string"] += 1
                     commands_intercepted += 1
                     exports_written += 1
+                    if _is_diff_locking_export(suite, dest):
+                        fs.append_history(
+                            f"[harness] valid unified-diff export detected; "
+                            f"locking in {dest.name} as final answer. "
+                            f"Trajectory terminating.\n"
+                        )
+                        export_locked_in = True
+                        break
                     continue
 
                 exp_path = _parse_export(cmd)
@@ -439,6 +486,16 @@ def run_shell_cell(
                             f"\n$ {cmd}\n[export] copied to {dest.name}\n"
                         )
                         exports_written += 1
+                        if _is_diff_locking_export(suite, dest):
+                            fs.append_history(
+                                f"[harness] valid unified-diff export "
+                                f"detected; locking in {dest.name} as "
+                                f"final answer. Trajectory terminating.\n"
+                            )
+                            export_locked_in = True
+                            op_counts["export"] += 1
+                            commands_intercepted += 1
+                            break
                     except (FileNotFoundError, ValueError) as exc:
                         fs.append_history(
                             f"\n$ {cmd}\n[export error] {exc}\n"
@@ -494,6 +551,14 @@ def run_shell_cell(
 
             if terminated_by_done:
                 turn += 1
+                break
+
+            # Auto-terminate on first valid-diff export (rule introduced
+            # in paper6 follow-up after watching cells export a good patch
+            # at turn N then overwrite it with garbage at turn N+k).
+            if export_locked_in:
+                turn += 1
+                terminated_by_done = True  # treat as a clean delivery
                 break
 
             finish_reason = gen.finish_reason

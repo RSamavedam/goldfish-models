@@ -148,8 +148,13 @@ The canonical end-of-task shape, every time:
     git -C repo diff > /tmp/answer.patch
     wc -c /tmp/answer.patch          # MUST be > 0 bytes
     export /tmp/answer.patch
-    done
     ```
+(You may add `done` if you like; it is not required. The harness
+auto-terminates the trajectory as soon as you `export` a file whose
+contents parse as a valid unified diff. So once you have exported a
+real diff, you are done — subsequent turns will NOT run. Empty
+exports and non-diff exports do NOT auto-terminate, so don't worry
+about exporting scratch files mid-investigation.)
 
 If `wc -c` says 0 bytes, you have NOT changed any files yet - your
 sed/edit didn't take effect. Diagnose THAT before exporting. An empty
