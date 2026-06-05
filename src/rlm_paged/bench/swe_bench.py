@@ -379,7 +379,14 @@ class SweBenchVerifiedSuite(BenchSuite):
                 sys.executable, "-m", "swebench.harness.run_evaluation",
                 "--predictions_path", str(predictions_path),
                 "--max_workers", "1",
-                "--run_id", f"goldfish-{instance_id}",
+                # run_id must be UNIQUE across concurrent scorer runs:
+                # the swebench harness names its Docker container
+                # `sweb.eval.<instance_id>.<run_id>`, so identical
+                # run_ids in parallel scorers collide with a 409 error
+                # and the trajectory silently records solved=False.
+                # Include PID + a high-res counter to disambiguate when
+                # multiple variants are running simultaneously on one host.
+                "--run_id", f"goldfish-{instance_id}-{os.getpid()}-{int(time.monotonic_ns())}",
                 "--instance_ids", instance_id,
                 "--dataset_name", DATASET_ID,
                 "--split", self.split,
