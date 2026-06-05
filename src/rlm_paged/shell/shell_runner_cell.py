@@ -44,12 +44,32 @@ from rlm_paged.shell.shell_runner import (
 from rlm_paged.shell.system_prompt import render_system_prompt
 
 
+# Sentinel: a ShellCell with L=L_NATIVE is the **no-truncation control**,
+# NOT a zero-context run. Picked 0 originally because Python YAML scalars
+# default to int and 0 was convenient; the name is misleading but the
+# convention is wired through analyze.py, every JSONL we've stored, and
+# every figure script. Treat 0 here as "infinity" — the bench's native
+# context limit. Everywhere it's RENDERED to a human (figures, tables,
+# the paper), it appears as "native" or "L=∞", never "L=0".
+L_NATIVE: int = 0
+
+
+def render_L(L: int) -> str:
+    """Human-facing label for a context cap. Use this in every figure,
+    table, log line, and journal entry. NEVER print bare `L=0`."""
+    return "L=∞" if L == L_NATIVE else f"L={L}"
+
+
 @dataclass
 class ShellCell:
     """One cell of a shell-harness sweep."""
 
     provider: str
-    L: int                            # = k: per-turn context cap; 0 = unlimited
+    # Per-turn context cap, in tokens. L = L_NATIVE (0) is the
+    # no-truncation control (native bench context). L > 0 is the
+    # goldfish regime under study. See render_L() for human-facing
+    # output — never display the bare integer 0.
+    L: int
     benchmark: str
     task_id: str
     seed: int = 0

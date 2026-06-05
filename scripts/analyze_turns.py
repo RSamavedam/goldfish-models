@@ -88,6 +88,14 @@ def _percentile(xs: list[float], p: float) -> float:
     return xs[f] + (xs[c] - xs[f]) * (k - f)
 
 
+def _label_L(L: int) -> str:
+    """Human-facing label. L=0 in stored data is the no-truncation
+    control, NOT a zero-context run. Mirror the convention from
+    rlm_paged.shell.shell_runner_cell.render_L (kept independent so
+    this script has no project deps)."""
+    return "L=∞ (native)" if L == 0 else f"L={L}"
+
+
 def _digest(rows: list[dict], cell_filter: str | None) -> None:
     if cell_filter:
         rows = [r for r in rows if fnmatch.fnmatch(r["cell_key"], cell_filter)]
