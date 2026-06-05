@@ -119,6 +119,26 @@ def main() -> int:
             "model saw and wrote."
         ),
     )
+    parser.add_argument(
+        "--prompt-variant",
+        choices=("baseline", "scratchpad"),
+        default=None,
+        help=(
+            "Override the system-prompt variant for every cell in the "
+            "sweep. 'scratchpad' adds the paged-memory protocol that "
+            "mandates notes.md maintenance. CLI flag overrides any "
+            "value the config might set."
+        ),
+    )
+    parser.add_argument(
+        "--scorer-diag-dir",
+        default=None,
+        help=(
+            "Persist per-instance scorer stdout/stderr/exit_code/report "
+            "into this directory (bug 14 visibility). Survives the "
+            "scorer's tempdir cleanup so silent failures stay diagnosable."
+        ),
+    )
     # ---------- S3 sync flags
     parser.add_argument("--s3-bucket", default=None)
     parser.add_argument("--s3-prefix", default=None)
@@ -188,6 +208,9 @@ def main() -> int:
         suite_kwargs = dict(bench_kwargs)
         if args.limit_tasks is not None:
             suite_kwargs["limit"] = args.limit_tasks
+        # CLI scorer-diag-dir wins over per-suite config; bug-14 forensics.
+        if args.scorer_diag_dir:
+            suite_kwargs["scorer_diag_dir"] = args.scorer_diag_dir
 
         if args.dry_run:
             print(f"would run: {spec} | shell | L={L} | {bench_name}")
@@ -209,6 +232,12 @@ def main() -> int:
 
         for task in tasks:
             cells_planned += 1
+            # Prompt variant: CLI flag overrides config; config defaults
+            # to baseline. This is the knob the paper sweep flips.
+            prompt_variant = (
+                args.prompt_variant
+                or config.get("prompt_variant", "baseline")
+            )
             cell = ShellCell(
                 provider=spec,
                 L=L,
@@ -217,6 +246,7 @@ def main() -> int:
                 cost_cap_tokens=int(config.get("cost_cap_tokens", 100_000)),
                 max_turns=int(config.get("max_turns", 16)),
                 command_timeout_s=float(config.get("command_timeout_s", 10.0)),
+                prompt_variant=prompt_variant,
             )
             key = _cell_key(cell)
             if key in done:

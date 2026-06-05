@@ -137,6 +137,7 @@ class SweBenchVerifiedSuite(BenchSuite):
         scorer_mode: str = "dry_run",
         scorer_timeout_s: float = 1800.0,
         docker_image_override: str | None = None,
+        scorer_diag_dir: Path | str | None = None,
     ) -> None:
         if scorer_mode not in {"dry_run", "subprocess"}:
             raise ValueError(f"unknown scorer_mode: {scorer_mode!r}")
@@ -150,6 +151,15 @@ class SweBenchVerifiedSuite(BenchSuite):
         self.scorer_mode = scorer_mode
         self.scorer_timeout_s = scorer_timeout_s
         self.docker_image_override = docker_image_override
+        # If set, every scorer invocation drops its stdout / stderr /
+        # report (or its failure trail) into a per-instance subdir
+        # under `scorer_diag_dir`. Lets us recover from bug 14-style
+        # silent failures (scorer says "no report → solved=False" with
+        # no trail). Persists OUTSIDE the tempdir so cleanup doesn't
+        # wipe the evidence.
+        self.scorer_diag_dir = (
+            Path(scorer_diag_dir) if scorer_diag_dir else None
+        )
         self._tasks: list[BenchTask] | None = None
 
     @property
@@ -240,10 +250,30 @@ class SweBenchVerifiedSuite(BenchSuite):
         + the per-instance Docker images are tightly coupled and we want
         the official entry point's behavior verbatim.
 
-        Returns (solved, score). On any error we return (False, 0.0) and
-        store the error in a sibling JSON file for postmortem.
+        Returns (solved, score). On error returns (False, 0.0); when
+        `scorer_diag_dir` is set, the scorer's stdout/stderr/exit_code
+        and the resolved/unresolved report (if any) are written there
+        keyed by instance_id, so silent failures stay diagnosable
+        (bug 14).
         """
         instance_id = task.payload["instance_id"]
+
+        # Persistent diag dir survives the tempdir cleanup. Without
+        # this, bug 14-style failures (no report, no error code, just
+        # a silent `False, 0.0`) leave no trail.
+        persist_diag = None
+        if self.scorer_diag_dir is not None:
+            persist_diag = self.scorer_diag_dir / instance_id
+            persist_diag.mkdir(parents=True, exist_ok=True)
+
+        def _persist(name: str, contents: str) -> None:
+            if persist_diag is None:
+                return
+            try:
+                (persist_diag / name).write_text(contents, encoding="utf-8")
+            except OSError:
+                pass
+
         with tempfile.TemporaryDirectory(prefix=f"swe-eval-{instance_id}-") as tmpdir:
             tmp = Path(tmpdir)
             patch_path = tmp / "model.patch"
@@ -264,12 +294,6 @@ class SweBenchVerifiedSuite(BenchSuite):
 
             log_dir = tmp / "logs"
             log_dir.mkdir()
-            # Use sys.executable, not the bare string "python" — Amazon
-            # Linux 2023 (and many minimal distros) ship `python3` only,
-            # no `python` symlink, and bare "python" raises
-            # FileNotFoundError. The exception handler below used to
-            # silently treat that as "swebench not installed", which is
-            # how the first cloud sweep scored every patch False.
             cmd = [
                 sys.executable, "-m", "swebench.harness.run_evaluation",
                 "--predictions_path", str(predictions_path),
@@ -280,36 +304,58 @@ class SweBenchVerifiedSuite(BenchSuite):
                 "--split", self.split,
                 "--cache_level", "instance",
             ]
+            _persist("cmd.txt", " ".join(cmd))
+            # Pass full env explicitly; HF_TOKEN must propagate to the
+            # swebench subprocess for dataset downloads, and inherited
+            # env from tmux/subprocess chains can be incomplete.
+            env = dict(os.environ)
             try:
                 proc = subprocess.run(
-                    cmd,
-                    cwd=tmp,
-                    capture_output=True,
-                    text=True,
+                    cmd, cwd=tmp,
+                    capture_output=True, text=True,
                     timeout=self.scorer_timeout_s,
+                    env=env,
                 )
-            except subprocess.TimeoutExpired:
-                # Write a sibling debug file so a stuck scorer is
-                # diagnosable from the JSONL rerun later.
-                (tmp / "_scorer_timeout").write_text(
-                    f"timeout after {self.scorer_timeout_s}s\n"
-                )
+            except subprocess.TimeoutExpired as exc:
+                _persist("_scorer_timeout",
+                         f"timeout after {self.scorer_timeout_s}s\n")
+                _persist("stdout.txt", (exc.stdout or b"").decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or ""))
+                _persist("stderr.txt", (exc.stderr or b"").decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or ""))
                 return False, 0.0
             except FileNotFoundError as exc:
-                # Almost certainly swebench is genuinely missing — but
-                # we no longer hide it, since the bare "python" mistake
-                # would mask real environment failures.
-                (tmp / "_scorer_not_installed").write_text(
-                    f"FileNotFoundError: {exc}\n"
-                )
+                _persist("_scorer_not_installed", f"FileNotFoundError: {exc}\n")
                 return False, 0.0
 
-            verdict, score = _read_swebench_report(log_dir, instance_id)
+            # Always persist stdout / stderr / exit code, even on
+            # success — they let us audit "why was this rated solved?"
+            # post-hoc.
+            _persist("stdout.txt", proc.stdout or "")
+            _persist("stderr.txt", proc.stderr or "")
+            _persist("exit_code.txt", str(proc.returncode))
+
+            # rglob from `tmp` (not just tmp/logs) — swebench CLI also
+            # writes a summary report at CWD root, AND under
+            # logs/run_evaluation/<run_id>/...
+            verdict, score = _read_swebench_report(tmp, instance_id)
             if verdict is None:
-                # Look in stdout for the rendered summary as a fallback.
                 verdict, score = _parse_summary_from_stdout(
                     proc.stdout + proc.stderr, instance_id
                 )
+            # Persist the resolved report's path (or noting absence)
+            # so we can tell "scorer ran but no report" apart from
+            # "report said unresolved".
+            found_reports = list(tmp.rglob("report.json")) + list(
+                tmp.rglob(f"*{instance_id}*.json")
+            )
+            _persist("report_files.txt",
+                     "\n".join(str(p.relative_to(tmp)) for p in found_reports)
+                     or "<no report files found>\n")
+            if verdict is None and proc.returncode != 0:
+                # No report AND non-zero exit: this is the bug 14
+                # failure mode. Record it loudly.
+                _persist("_scorer_failed",
+                         f"exit={proc.returncode}, no report.json, "
+                         f"stdout/stderr in this dir\n")
             return bool(verdict), float(score)
 
 

@@ -233,5 +233,99 @@ user_output/ → done. Skip any of those steps and the score will be 0.
 """
 
 
-def render_system_prompt(*, k: int, timeout_s: float) -> str:
-    return SYSTEM_PROMPT_TEMPLATE.format(k=k, timeout_s=timeout_s)
+# --------------------------------------------------------------------------
+# Scratchpad addendum: filesystem-as-memory variant
+# --------------------------------------------------------------------------
+#
+# Under tight L the rolling history.txt window evicts old turns. The model
+# can't remember what it already learned, so it re-`cat`s instructions.txt
+# every few turns and re-explores files it already read. The only thing
+# that survives across turns is the agent filesystem itself.
+#
+# This addendum tells the model to maintain a persistent notes.md file
+# that captures: (1) the task summary, (2) what's been explored, (3) the
+# current hypothesis, (4) the next action. EVERY turn re-reads notes.md
+# before deciding, EVERY turn appends one line. Files survive the
+# goldfish window; turn-level memory doesn't.
+
+_SCRATCHPAD_RULE = """
+
+PAGED-MEMORY PROTOCOL (CRITICAL — read this carefully)
+======================================================
+The {k}-token history window is too small to hold everything you'll
+learn. You WILL forget things between turns. The filesystem is your
+only persistent memory. Use it.
+
+Maintain a single file, `notes.md`, with this structure:
+
+    # Task
+    one-sentence task summary
+
+    # Map
+    bullet list of files / directories I've located, with one-line summaries
+
+    # Hypotheses
+    what I currently think the bug is, with evidence
+
+    # Tried
+    - turn N: <action> -> <result>
+
+    # Next
+    the SINGLE next concrete action
+
+EVERY TURN you must:
+  1. `cat notes.md` FIRST, before anything else. This re-grounds you.
+  2. Take ONE concrete action (run commands, inspect a file, write a
+     fix).
+  3. APPEND to notes.md with `echo '...' >> notes.md` or rewrite the
+     relevant section. Update `# Tried` (one new line) and `# Next`
+     (the next single action).
+
+If you find yourself wanting to `cat instructions.txt` again, you have
+NOT updated notes.md well enough — the recovery should happen via
+notes.md, not the instructions.
+
+Canonical turn shape:
+    ```bash
+    cat notes.md
+    # ... one concrete action ...
+    echo '- turn N: <what I did> -> <what I saw>' >> notes.md
+    ```
+
+If you have a confirmed fix and the patch is exported (see HARD RULE 1),
+the canonical final turn is the same as before:
+    ```bash
+    git -C repo diff > /tmp/answer.patch
+    export /tmp/answer.patch
+    wc -c user_output/*
+    done
+    ```
+"""
+
+
+def render_system_prompt(
+    *,
+    k: int,
+    timeout_s: float,
+    variant: str = "baseline",
+) -> str:
+    """Render the harness system prompt.
+
+    Args:
+      k: per-turn context cap (the L in the goldfish regime). Passed
+         into the prompt body so the model knows its window size.
+      timeout_s: per-command timeout. Mentioned in the LIMITS section.
+      variant: "baseline" (current production prompt) or "scratchpad"
+         (adds the paged-memory protocol that mandates notes.md
+         maintenance). The paper-sprint comparison runs both back-to-
+         back on the same tasks.
+
+    The baseline already mentions writing notes; the scratchpad variant
+    makes it a hard structural rule the model must follow every turn.
+    """
+    body = SYSTEM_PROMPT_TEMPLATE.format(k=k, timeout_s=timeout_s)
+    if variant == "scratchpad":
+        body = body + _SCRATCHPAD_RULE.format(k=k)
+    elif variant != "baseline":
+        raise ValueError(f"unknown prompt variant: {variant!r}")
+    return body

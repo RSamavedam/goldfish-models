@@ -1,7 +1,7 @@
 # SWE-bench Verified sweep config.
 
 sweep:
-  L_values: [128, 512, 2048, 8192]
+  L_values: [128, 512, 1024, 2048, 8192]
   include_native_baseline: true
 
 providers:

@@ -1,0 +1,33 @@
+# Paper-sprint sweep: same matrix, run twice — once baseline, once
+# scratchpad — so we can show solve-rate-vs-L for both variants on
+# the same task set.
+#
+# 5 tasks × 5 L values × 1 provider = 25 cells per variant.
+# 50 cells total at ~$2-4/cell → ~$50-100 per variant.
+#
+# Tasks chosen for variety: small + medium + large patches, mix of
+# subsystems. The first one (astropy-12907) is the one we have
+# reproducibility on; the rest are fresh draws.
+
+sweep:
+  L_values: [128, 512, 1024, 2048]
+  include_native_baseline: true   # adds L=0 control
+
+providers:
+  - openai:gpt-5
+
+benchmarks:
+  swe_bench_verified:
+    scorer_mode: subprocess
+    scorer_timeout_s: 1800.0
+    task_ids:
+      - "astropy__astropy-12907"
+      - "astropy__astropy-13033"
+      - "astropy__astropy-13236"
+      - "django__django-13551"
+      - "sympy__sympy-13895"
+
+cost_cap_tokens: 250000
+max_turns: 32
+command_timeout_s: 60.0
+seeds: [0]

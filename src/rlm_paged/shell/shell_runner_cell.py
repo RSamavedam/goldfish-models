@@ -57,6 +57,9 @@ class ShellCell:
     max_tokens_per_turn: int | None = None  # default: same as L
     cost_cap_tokens: int = 100_000
     command_timeout_s: float = 10.0
+    # "baseline" or "scratchpad" — the latter enables the paged-memory
+    # protocol that makes the model maintain notes.md every turn.
+    prompt_variant: str = "baseline"
 
 
 @dataclass
@@ -212,7 +215,11 @@ def run_shell_cell(
     runner = ShellRunner(root=root, timeout_s=cell.command_timeout_s)
     cap = CostCap(max_tokens=cell.cost_cap_tokens)
 
-    system_prompt = render_system_prompt(k=k, timeout_s=cell.command_timeout_s)
+    system_prompt = render_system_prompt(
+        k=k,
+        timeout_s=cell.command_timeout_s,
+        variant=cell.prompt_variant,
+    )
 
     input_tokens = 0
     output_tokens = 0
