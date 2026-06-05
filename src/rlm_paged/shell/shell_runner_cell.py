@@ -228,15 +228,14 @@ def run_shell_cell(
     started = time.perf_counter()
 
     k = cell.L if cell.L > 0 else 10**9
-    # The per-turn output budget is INDEPENDENT of L. L is the
-    # context-window cap (goldfish constraint on what survives into
-    # the next turn). The model still needs room to produce a useful
-    # response THIS turn. With reasoning models, thinking-tokens
-    # compete with output-tokens for the same budget — capping at L
-    # tokens at small L causes 100% LENGTH-CAP turns with zero output.
-    # Default to 4096 across all L; override via max_tokens_per_turn
-    # in the config if needed.
-    max_out = cell.max_tokens_per_turn or 4096
+    # max_out = L: output budget equals context budget. This is the
+    # research regime — the model writes within the same scale as
+    # what it reads. For reasoning models this means thinking-tokens
+    # COMPETE with visible-output tokens for the same budget; the
+    # system prompt tells the model to minimize internal reasoning
+    # so output isn't crowded out. The native baseline (L=0) gets
+    # a generous 4096 so it can demonstrate non-goldfish behavior.
+    max_out = cell.max_tokens_per_turn or (cell.L if cell.L > 0 else 4096)
 
     # Build the agent's walled-off filesystem.
     if agent_root is None:

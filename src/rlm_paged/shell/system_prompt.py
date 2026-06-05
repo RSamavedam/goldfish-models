@@ -86,6 +86,17 @@ LIMITS
   • Context window (what survives into next turn's history): {k} tokens.
   • Response: at most {max_out} tokens per turn.
   • Command timeout: {timeout_s}s per command.
+
+  IMPORTANT — your response budget is small and IT IS SHARED with any
+  internal reasoning you do. If you spend the budget on hidden
+  chain-of-thought, none is left for the visible response we need.
+  At small {max_out} this means: emit zero or near-zero internal
+  reasoning. Go straight to the shell commands. Do NOT think out
+  loud about your approach before writing it. Do NOT enumerate
+  alternatives. The notebook (the agent filesystem) is where you
+  think, not in hidden tokens. If you need to reason, write it to a
+  file in one short shell line, then read it back next turn.
+
   • Allowed binaries: cat / head / tail / less / grep / find / ls /
     stat / wc / echo / printf / tr / sort / uniq / cut / sed / awk /
     diff / patch / mkdir / touch / rm / mv / cp / ln / chmod /
