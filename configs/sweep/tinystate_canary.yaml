@@ -1,0 +1,23 @@
+# Tinystate canary: same 3 tasks, just L=128 + L=512 + L=2048 to see
+# if the position markers + neutral prompt change behavior at small L.
+# ~6 cells, <$15.
+
+sweep:
+  L_values: [128, 512, 2048]
+  include_native_baseline: false
+
+providers:
+  - openai:gpt-5
+
+benchmarks:
+  swe_bench_verified:
+    scorer_mode: subprocess
+    scorer_timeout_s: 1800.0
+    task_ids:
+      - "astropy__astropy-12907"
+      - "astropy__astropy-13033"
+
+cost_cap_tokens: 250000
+max_turns: 24       # tighter than full sweep — this is a tail check
+command_timeout_s: 60.0
+seeds: [0]

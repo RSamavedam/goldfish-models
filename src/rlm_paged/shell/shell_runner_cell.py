@@ -119,6 +119,33 @@ def _truncate_to_k_tokens(text: str, k: int) -> tuple[str, bool]:
     return token_decode(ids), True
 
 
+def _inject_position_markers(text: str, every: int = 16) -> str:
+    """Insert «@N» markers every `every` tokens of `text`.
+
+    These markers tell the model where in its budget it is. They are
+    inserted AFTER truncation so they don't count toward the L cap.
+    They ARE counted toward billing (every char goes to the API), but
+    that's a fixed overhead the user-supplied prompt tolerates.
+
+    The marker uses guillemets («») rather than ASCII so it's
+    visually distinct from any code/output in the agent's history.
+    """
+    if every <= 0:
+        return text
+    ids = token_encode(text)
+    if len(ids) <= every:
+        # Still annotate with one marker at end so the model knows we
+        # could have annotated if there were enough tokens.
+        return f"{text}«@{len(ids)}»"
+    chunks: list[str] = []
+    for i in range(0, len(ids), every):
+        slice_ids = ids[i : i + every]
+        chunks.append(token_decode(slice_ids))
+        # Place a marker labeled with the cumulative token count.
+        chunks.append(f"«@{min(i + every, len(ids))}»")
+    return "".join(chunks)
+
+
 def _truncate_response_to_k(text: str, k: int) -> tuple[str, bool]:
     """Truncate from the FRONT (keep head)."""
     if token_count(text) <= k:
@@ -288,6 +315,13 @@ def run_shell_cell(
                     "(this is turn 0; history.txt is empty. "
                     "`cat instructions.txt` to see the task.)"
                 )
+
+            # Tinystate variant: inject position markers every 16 tokens
+            # AFTER truncation. Markers are visual hints («@N») that show
+            # the model how much of its L-token budget it has used. They
+            # do NOT count toward L (truncation already happened).
+            if cell.prompt_variant == "tinystate":
+                context = _inject_position_markers(context, every=16)
 
             prompt = context
             fs.write_stdin(turn, prompt)

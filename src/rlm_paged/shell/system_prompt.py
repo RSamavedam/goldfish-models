@@ -249,6 +249,38 @@ user_output/ → done. Skip any of those steps and the score will be 0.
 # before deciding, EVERY turn appends one line. Files survive the
 # goldfish window; turn-level memory doesn't.
 
+# --------------------------------------------------------------------------
+# Tinystate variant: neutral, no prescribed protocol
+# --------------------------------------------------------------------------
+#
+# Per goldfish principle: the system prompt does NOT prescribe a memory
+# protocol. It just makes the constraints viscerally clear:
+#   - your context window is L tokens (small!)
+#   - your output budget is M tokens per turn
+#   - the filesystem is the only thing that persists
+# The model figures out the rest. We also tell it about the «@N» token
+# markers we inject every 16 tokens, so it can use them to gauge where
+# in the window things are.
+
+_TINYSTATE_RULE = """
+
+GOLDFISH CONTEXT (read carefully — this changes how you should work)
+====================================================================
+Your input each turn is HARD-CAPPED at {k} tokens of conversation
+history. Your output is HARD-CAPPED at {max_out} tokens per turn.
+The system prompt you are reading right now does NOT count toward
+either cap.
+
+Within the {k}-token context window the harness inserts position
+markers like «@16», «@32», «@48», … every 16 tokens. These markers
+do NOT count toward your {k} budget — they're free hints. Use them
+to see how much room you have left, how big the output of the
+previous command was, and whether you're about to fall off the edge.
+
+The filesystem persists between turns. The context window does not.
+"""
+
+
 _SCRATCHPAD_RULE = """
 
 PAGED-MEMORY PROTOCOL (CRITICAL — read this carefully)
@@ -330,6 +362,8 @@ def render_system_prompt(
     )
     if variant == "scratchpad":
         body = body + _SCRATCHPAD_RULE.format(k=k)
+    elif variant == "tinystate":
+        body = body + _TINYSTATE_RULE.format(k=k, max_out=max_out)
     elif variant != "baseline":
         raise ValueError(f"unknown prompt variant: {variant!r}")
     return body

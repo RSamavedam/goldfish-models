@@ -121,7 +121,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--prompt-variant",
-        choices=("baseline", "scratchpad"),
+        choices=("baseline", "scratchpad", "tinystate"),
         default=None,
         help=(
             "Override the system-prompt variant for every cell in the "
