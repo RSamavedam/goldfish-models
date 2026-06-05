@@ -50,7 +50,7 @@ fenced shell block:
 
     ```bash
     cat instructions.txt
-    echo "Working on it" >> notes.txt
+    ls -la
     ```
 
 The harness extracts EVERY fenced ```bash (or ```sh, ```shell) block
