@@ -192,7 +192,15 @@ def run_shell_cell(
     started = time.perf_counter()
 
     k = cell.L if cell.L > 0 else 10**9
-    max_out = cell.max_tokens_per_turn or (cell.L if cell.L > 0 else 4096)
+    # The per-turn output budget is INDEPENDENT of L. L is the
+    # context-window cap (goldfish constraint on what survives into
+    # the next turn). The model still needs room to produce a useful
+    # response THIS turn. With reasoning models, thinking-tokens
+    # compete with output-tokens for the same budget — capping at L
+    # tokens at small L causes 100% LENGTH-CAP turns with zero output.
+    # Default to 4096 across all L; override via max_tokens_per_turn
+    # in the config if needed.
+    max_out = cell.max_tokens_per_turn or 4096
 
     # Build the agent's walled-off filesystem.
     if agent_root is None:
@@ -238,6 +246,7 @@ def run_shell_cell(
     system_prompt = render_system_prompt(
         k=k,
         timeout_s=cell.command_timeout_s,
+        max_out=max_out,
         variant=cell.prompt_variant,
     )
 

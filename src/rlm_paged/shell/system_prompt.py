@@ -83,7 +83,8 @@ Three commands the harness intercepts (does NOT actually shell-execute):
 
 LIMITS
 ======
-  • Response: at most {k} tokens.
+  • Context window (what survives into next turn's history): {k} tokens.
+  • Response: at most {max_out} tokens per turn.
   • Command timeout: {timeout_s}s per command.
   • Allowed binaries: cat / head / tail / less / grep / find / ls /
     stat / wc / echo / printf / tr / sort / uniq / cut / sed / awk /
@@ -307,23 +308,26 @@ def render_system_prompt(
     *,
     k: int,
     timeout_s: float,
+    max_out: int = 4096,
     variant: str = "baseline",
 ) -> str:
     """Render the harness system prompt.
 
     Args:
-      k: per-turn context cap (the L in the goldfish regime). Passed
-         into the prompt body so the model knows its window size.
-      timeout_s: per-command timeout. Mentioned in the LIMITS section.
-      variant: "baseline" (current production prompt) or "scratchpad"
-         (adds the paged-memory protocol that mandates notes.md
-         maintenance). The paper-sprint comparison runs both back-to-
-         back on the same tasks.
-
-    The baseline already mentions writing notes; the scratchpad variant
-    makes it a hard structural rule the model must follow every turn.
+      k: context-window cap in tokens — last `k` of history.txt
+         survives into the next turn. This is the L of the goldfish
+         regime under study.
+      timeout_s: per-command timeout.
+      max_out: per-turn output budget. Independent of k. Capping at
+         k for small L causes 100% LENGTH-CAP turns with zero output
+         (reasoning tokens consume the entire budget). See bug-15
+         fix in shell_runner_cell.py.
+      variant: "baseline" or "scratchpad" — scratchpad adds the
+         paged-memory protocol mandating notes.md every turn.
     """
-    body = SYSTEM_PROMPT_TEMPLATE.format(k=k, timeout_s=timeout_s)
+    body = SYSTEM_PROMPT_TEMPLATE.format(
+        k=k, timeout_s=timeout_s, max_out=max_out,
+    )
     if variant == "scratchpad":
         body = body + _SCRATCHPAD_RULE.format(k=k)
     elif variant != "baseline":
