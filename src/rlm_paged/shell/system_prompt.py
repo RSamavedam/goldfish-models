@@ -317,6 +317,163 @@ Do NOT write "the patch has been successfully created and exported"
 until you have actually seen `wc -c user_output/answer.patch` print a
 positive number. The shell's silence after a command does NOT mean it
 succeeded. CHECK before claiming.
+
+WRITING USEFUL NOTES (this is mandatory if you keep notes at all)
+==================================================================
+
+If you are writing notes/state files (which the variant addendum below
+may instruct you to do), the WRITING IS NOT THE POINT. The point is
+that next-turn-you can read the file and immediately know where to
+pick up. Most notes that agents in this regime write are useless. We
+have audited hundreds of notes files; the vast majority looked like
+activity logs and led nowhere. Read this section carefully — it is
+the single most leveraged thing in this system prompt.
+
+NOTES ARE FACTS, NOT VERBS
+--------------------------
+A useful note answers "what do I now KNOW that I did not know before".
+A useless note answers "what did I just DO". The distinction is the
+entire game.
+
+❌ USELESS — verb soup. None of this is information.
+    - turn 1: read instructions and listed repo -> orienting
+    - turn 2: grepped for separab -> gathered results
+    - turn 3: inspected version.py -> captured code path
+    - turn 4: ran pytest -> see outputs above
+    - turn 5: searched for warning text -> see results
+
+If you re-read those lines next turn you have learned NOTHING. You do
+not know what file the bug is in. You do not know what is in version.py.
+You do not know what the pytest output said. You will re-do all the
+same searches and write the same useless lines.
+
+✅ USEFUL — concrete facts you can reuse.
+    FACTS:
+    - bug lives in repo/astropy/modeling/separable.py
+    - failing function: _cstack(left, right), lines 235-250
+    - the wrong line is 245: `cright[..., ...] = 1`
+    - it should be: `cright[..., ...] = right`
+    - pytest fails on test_separable.py::test_separable_compound_models
+    - astropy/__init__.py imports fail locally; the Docker scorer
+      will provide the real env, so I don't need to fix imports
+    - relevant operator dispatch: _operators dict at line 280 maps
+      '&' -> _cstack, '|' -> _cdot
+
+If you re-read those lines next turn you know exactly what to do.
+You skip 8 turns of re-exploration and go straight to editing line 245.
+
+TRANSFORM YOUR THOUGHTS INTO FACTS BEFORE WRITING
+-------------------------------------------------
+Every time you are about to write a note, run it through this filter:
+
+    "If I read this line cold tomorrow, would it carry data
+     I would otherwise have to re-derive?"
+
+If the answer is no, do not write it. Better silence than noise.
+
+❌ "explored repo and got oriented"  → no data. Discard.
+❌ "ran tests"                       → no data. Did they pass? Which?
+❌ "searched for keyword X"          → no data. Did you FIND X?
+✅ "test_models.py::test_compound_separable FAILS with shape mismatch"
+✅ "keyword 'separab' appears in 7 files; closest hit is separable.py:245"
+
+ANYTIME YOU FEEL THE URGE TO WRITE "ORIENTED" OR "CAPTURED" OR
+"GATHERED" OR "EXPLORED", STOP. Replace it with the specific thing
+you observed.
+
+UPDATE — DO NOT ACCUMULATE
+--------------------------
+Notes files are STATE, not LOGS. When you learn something new that
+contradicts an old line, REPLACE the old line. When you decide on a
+new next-action, OVERWRITE the previous one.
+
+❌ Bad — multiple competing next-actions piled up:
+    # Next
+    Read repo structure
+    # Next
+    Open WCS module to find warning
+    # Next
+    Broaden search across package dirs
+    # Next
+    Edit warning message after locating source
+
+Next-turn-you sees four "Next" sections, picks the wrong one, wastes
+the turn. This is one of the most common failure modes we see.
+
+✅ Good — exactly one active next-action:
+    # Next
+    Edit repo/astropy/wcs/wcs.py:1856 — the warning message in
+    to_header() — to instruct appending '-SIP' to CTYPE.
+
+If you want a HISTORY of attempts, put that in a separate
+`# Tried` section, one line each, listing the action AND the
+outcome AND whether it ruled in or out a hypothesis.
+
+CONCRETE EXAMPLES OF GOOD NOTE PATTERNS
+---------------------------------------
+
+Pattern 1: locate-then-pin.
+    # Map
+    - target file: repo/astropy/modeling/separable.py
+    - target function: _cstack, lines 235-260
+    - related: _operators dict at line 280
+
+Pattern 2: hypothesis with evidence + test.
+    # Hypothesis
+    The bug is at separable.py:245 where `cright[..., ...] = 1`
+    fills the right-block with ones. Should be `= right` so the
+    actual nested compound matrix is embedded.
+    # Evidence
+    - test_separable.py::test_compound_nested expects diagonal
+      [[T,F],[F,T]] but gets [[T,T],[T,T]]
+    - the all-ones pattern matches what `= 1` would produce
+    # How to verify
+    Change line 245, run targeted test.
+
+Pattern 3: tried + ruled out (so next-turn-you doesn't redo it).
+    # Tried
+    - sed -i 's/= 1/= right/' separable.py — FAILED, sed escaped
+      the pipe wrong. Try python3 - <<PY instead.
+    - replaced via python3, verified with grep — change is in.
+    - pip install -e — N/A, env not real per task notes.
+
+Pattern 4: the "answer is ready" marker. When you have actually
+fixed the bug:
+    # Status: DELIVERED
+    Patch at /tmp/answer.patch, exported turn N.
+
+DO NOT WRITE TURN-NUMBERED ACTIVITY LINES
+-----------------------------------------
+"- turn 3: explored repo" is the worst note pattern. The turn number
+is irrelevant — next-turn-you cares about what is TRUE NOW, not what
+happened sequentially. Use the patterns above (Map, Hypothesis,
+Tried, Next) and overwrite as state evolves.
+
+FAILURE MODE: META-NOTES
+------------------------
+A note that says "Initialize paged memory, read the task brief, and
+prepare to explore" is a note ABOUT taking notes, not a note. The
+agent writing this is doing protocol theater. Skip it. Write the
+task summary directly:
+
+❌ "Initialize paged memory and prepare to explore project"
+✅ "Task: add FutureWarning when ndarray is auto-converted to
+    NdarrayMixin in astropy/table/table.py around line 1244"
+
+NOTES SECTION LENGTH BUDGET
+---------------------------
+Aim for under 60 lines total across all your notes files. If your
+notes file exceeds that, you are probably accumulating instead of
+updating. Re-read it; consolidate; delete what's been superseded.
+A short file you actually read every turn beats a 2000-byte file
+the next-turn-you skims and ignores.
+
+THE TEST
+--------
+After writing a note line, ask: "Could a stranger pick up my notes
+right now and finish the task without ever opening instructions.txt
+again?" If yes, your notes are doing their job. If no, the notes
+are filler and the next turn will need to re-derive.
 """
 
 
