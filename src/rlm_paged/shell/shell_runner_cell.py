@@ -343,12 +343,27 @@ def run_shell_cell(
                 break
 
             try:
-                gen = client.generate(
-                    prompt,
-                    max_tokens=max_out,
-                    system=system_prompt,
-                    temperature=0.0,
+                # Tinystate variant uses the stop-and-resume warning
+                # mechanism if the client supports it; baseline +
+                # scratchpad use the plain non-streaming generate.
+                use_warnings = (
+                    cell.prompt_variant == "tinystate"
+                    and hasattr(client, "generate_with_warnings")
                 )
+                if use_warnings:
+                    gen = client.generate_with_warnings(
+                        prompt,
+                        max_tokens=max_out,
+                        system=system_prompt,
+                        warn_at_remaining=[64, 32, 16],
+                    )
+                else:
+                    gen = client.generate(
+                        prompt,
+                        max_tokens=max_out,
+                        system=system_prompt,
+                        temperature=0.0,
+                    )
             except Exception as exc:
                 failure_reason = f"provider_error: {type(exc).__name__}: {exc}"
                 break

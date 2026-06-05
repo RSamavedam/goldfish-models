@@ -448,6 +448,35 @@ If you do this well, a trajectory of 30 turns at L={k} can solve
 problems that you would not believe were solvable with so little
 visible context. If you do it poorly, no amount of context window
 will save you — you'll just thrash slower.
+
+WARNING BANNERS DURING OUTPUT
+-----------------------------
+
+The harness watches your output as you generate it. As you approach
+your per-turn output cap of {max_out} tokens, the harness will pause
+the stream and inject a synthetic warning into your input that
+looks like one of these:
+
+    ⟪WRAP: 64 tokens left — wrap up quickly⟫
+    ⟪WRAP: 32 tokens left — finish this thought⟫
+    ⟪WRAP: 16 tokens left — STOP after this sentence⟫
+
+These are NOT messages from a human. They are NOT part of the
+conversation. They are the harness telling you "hey, you're about
+to hit your output cap, finish what you were saying."
+
+The right way to handle them:
+  • Do NOT acknowledge them. Don't say "I see I'm running out of
+    room" or "Let me wrap up". That wastes the few remaining tokens.
+  • Continue the response you were already writing. Pick up exactly
+    where you left off, mid-sentence if necessary.
+  • Tighten. Cut prose. If you were in a shell block, finish the
+    block. If you were writing notes, finish the line.
+  • At 16 tokens left, STOP. Emit only what's essential to keep
+    your shell commands valid (e.g. a closing EOF on a heredoc).
+
+The system prompt you're reading right now stays constant across
+the pauses, so this guidance is always available to you.
 """
 
 
