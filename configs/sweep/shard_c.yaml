@@ -1,0 +1,21 @@
+# Shard C: yet another 3 tasks
+sweep:
+  L_values: [128, 512, 1024, 2048]
+  include_native_baseline: true
+
+providers:
+  - openai:gpt-4o
+
+benchmarks:
+  swe_bench_verified:
+    scorer_mode: subprocess
+    scorer_timeout_s: 1800.0
+    task_ids:
+      - "sympy__sympy-13647"
+      - "django__django-13447"
+      - "astropy__astropy-14096"
+
+cost_cap_tokens: 250000
+max_turns: 24
+command_timeout_s: 60.0
+seeds: [0]

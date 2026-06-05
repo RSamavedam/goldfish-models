@@ -1,0 +1,24 @@
+# Shard A: 3 tasks × 5 L × 1 provider (gpt-4o only — gpt-5 is broken at small L)
+# Disjoint from shards B and C so concurrent sweeps don't collide on
+# Docker container names (bug 16).
+
+sweep:
+  L_values: [128, 512, 1024, 2048]
+  include_native_baseline: true
+
+providers:
+  - openai:gpt-4o
+
+benchmarks:
+  swe_bench_verified:
+    scorer_mode: subprocess
+    scorer_timeout_s: 1800.0
+    task_ids:
+      - "astropy__astropy-12907"
+      - "django__django-13551"
+      - "sympy__sympy-13895"
+
+cost_cap_tokens: 250000
+max_turns: 24
+command_timeout_s: 60.0
+seeds: [0]
