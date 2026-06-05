@@ -133,6 +133,7 @@ class SweBenchVerifiedSuite(BenchSuite):
         *,
         split: str = "test",
         limit: int | None = None,
+        task_ids: list[str] | None = None,
         scorer_mode: str = "dry_run",
         scorer_timeout_s: float = 1800.0,
         docker_image_override: str | None = None,
@@ -141,6 +142,11 @@ class SweBenchVerifiedSuite(BenchSuite):
             raise ValueError(f"unknown scorer_mode: {scorer_mode!r}")
         self.split = split
         self.limit = limit
+        # If set, keep only tasks whose instance_id is in this list.
+        # Applied BEFORE `limit`. Lets the diagnostic config (and any
+        # future targeted re-run) pin a specific instance instead of
+        # taking whatever's first in dataset order.
+        self.task_ids = set(task_ids) if task_ids else None
         self.scorer_mode = scorer_mode
         self.scorer_timeout_s = scorer_timeout_s
         self.docker_image_override = docker_image_override
@@ -185,6 +191,8 @@ class SweBenchVerifiedSuite(BenchSuite):
                     },
                 )
             )
+        if self.task_ids:
+            out = [t for t in out if t.task_id in self.task_ids]
         if self.limit:
             out = out[: self.limit]
         self._tasks = out
