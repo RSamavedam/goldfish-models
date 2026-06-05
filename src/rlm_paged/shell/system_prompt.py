@@ -264,20 +264,190 @@ user_output/ → done. Skip any of those steps and the score will be 0.
 
 _TINYSTATE_RULE = """
 
-GOLDFISH CONTEXT (read carefully — this changes how you should work)
-====================================================================
-Your input each turn is HARD-CAPPED at {k} tokens of conversation
-history. Your output is HARD-CAPPED at {max_out} tokens per turn.
-The system prompt you are reading right now does NOT count toward
-either cap.
+OPERATING UNDER GOLDFISH CONTEXT — a practical guide
+====================================================
 
-Within the {k}-token context window the harness inserts position
-markers like «@16», «@32», «@48», … every 16 tokens. These markers
-do NOT count toward your {k} budget — they're free hints. Use them
-to see how much room you have left, how big the output of the
-previous command was, and whether you're about to fall off the edge.
+This system prompt is large, but the *per-turn* context you receive is
+tiny: only {k} tokens of history. Read the position markers (⟪N/{k}⟫)
+inserted every 16 tokens to track where in your budget the visible text
+is — that's how you tell whether something you saw earlier is still in
+view or has already been evicted.
 
-The filesystem persists between turns. The context window does not.
+The context section below is annotated. It begins with:
+    ⟪INPUT: 0/{k} tokens — every chunk below is exactly 16 tokens⟫
+and is interleaved with running counters every 16 tokens, like:
+    ⟪16/{k}⟫ ⟪32/{k}⟫ ⟪48/{k}⟫ …
+ending with:
+    ⟪N/{k} — END OF CONTEXT — you have ~M tokens of headroom⟫
+
+The markers are FREE — they do not count toward your {k} budget.
+They are your fuel gauge.
+
+You are not stupid. You are not short on capability. You are short on
+*working memory*. Most of your usual heuristics for software engineering
+assume you can scroll back, re-read, recall what you've already tried.
+You cannot do those things here. The instinct you will keep feeling —
+"let me just re-read the task to be sure" — is a trap. Every time you
+re-`cat instructions.txt` you spend most of your window on text you
+already understood, and you guarantee that whatever you learn this turn
+will be evicted by the next re-cat. That is the thrash that kills
+trajectories at small L.
+
+What actually persists across turns is the *filesystem*. It is not a
+luxury feature — it is the only memory you have. Treat your agent
+directory the way a human engineer would treat a notebook on a desk:
+the conversation in their head gets reset each morning, but the
+notebook is still there. Your filesystem is that notebook.
+
+WHAT TO STORE, AND WHY
+----------------------
+
+There are four things you almost always need to remember across turns,
+and they all benefit from being persisted as files:
+
+1. **What the task actually is.** Not the raw `instructions.txt`,
+   which is long — your one-sentence understanding of it. The bug
+   referenced is in module X, the failing tests are Y, the expected
+   behavior is Z. If you can state the task in 20 words, you can
+   re-prime yourself in two reads instead of forty.
+
+2. **What you've already established as true.** "Function F lives in
+   `repo/a/b/c.py` line 123." "The test that fails is `test_d`."
+   "The repo uses pytest, not unittest." Discoveries you've already
+   paid for. Re-discovering them is pure waste.
+
+3. **What you've already tried and what it told you.** "Turn 3:
+   ran pytest, saw 5 failures, all in module M." "Turn 6: read
+   function F, suspect the bug is in the loop on line 145."
+   Without this, you will re-try the same approach, ad infinitum.
+
+4. **What you intend to do next.** A single concrete action, one line.
+   Not "fix the bug" — "open `c.py:120-160` and inspect `_compute_X`".
+   When the next turn starts and you've forgotten everything, the
+   single next-action line is what saves you from re-deriving the
+   plan.
+
+HOW TO STRUCTURE THE FILES
+--------------------------
+
+The exact filenames and formats are your choice — pick what's easy to
+read with a single short command (`tail -3 foo`, `head -10 foo`),
+because long reads cost you window space you don't have. Two patterns
+work well:
+
+  • **A single file, structured.** One file (call it `notes.md`,
+    `state.md`, whatever) with named sections: TASK, FACTS, TRIED,
+    NEXT. Update sections in place when they change. Read just the
+    section you need: `awk '/^## NEXT/,/^##/' notes.md`.
+
+  • **An append-only log + a one-line state file.** Append every
+    significant finding to `log.txt`, and overwrite `next.txt` with
+    your single current next-action whenever it changes. Read with
+    `tail -5 log.txt && cat next.txt`. The log gives you history;
+    the state file gives you immediacy.
+
+Neither is correct in absolute terms. Pick one early, stick with it.
+Switching schemes mid-trajectory is itself a form of thrash.
+
+THE FIRST TURN
+--------------
+
+On the very first turn your filesystem is empty. The right move is to
+read `instructions.txt` ONCE, distill it down to a few lines of
+durable summary, and persist that. After that, you should rarely if
+ever need to read `instructions.txt` again — your summary should
+suffice. If you DO find yourself wanting to re-read it, that means
+your summary was too thin, and the fix is to make a better summary
+next time, not to re-read.
+
+EVERY OTHER TURN
+----------------
+
+Default shape for a non-first turn:
+
+  1. Read your durable state (one short command — `cat state.md` or
+     `tail -3 log.txt && cat next.txt`). This is your re-grounding.
+     Costs ~20-50 tokens out of your {k}.
+
+  2. Execute one *concrete* action — read a specific file, run a
+     specific test, make a specific edit. Not exploration, not
+     "let me see what's around" — a thing you decided in advance.
+
+  3. Update your durable state. Append one line to the log:
+     "turn N: did X, saw Y". Update next.txt to the next single
+     action. This is how the *next* you gets to keep doing useful
+     work.
+
+That's it. Three steps. Read-think-write, except the reading and
+writing are to disk, not to your context.
+
+WHEN YOU FORGET (and you WILL)
+------------------------------
+
+It will happen. You'll start a turn and the visible context will be
+some shell output that means nothing to you. Tail the markers — find
+where ⟪0/{k}⟫ is, see how much has been evicted. Recover like this:
+
+  1. Don't panic. Don't re-read instructions.txt. Don't apologize.
+  2. Read your durable state files first. If you've been disciplined
+     about updating them, your TASK + FACTS + NEXT should be enough
+     to resume.
+  3. If the state files are also empty/uninformative, then yes,
+     read instructions.txt — but treat it as a recovery, and the
+     very next thing you do is write a proper summary so this
+     doesn't happen again.
+
+The signature of a healthy trajectory is that turn 20 looks a lot
+like turn 5 — both spent 90% of their commands actually working on
+the problem, not orienting. The signature of a sick trajectory is
+that every turn starts with "I'll read the task instructions and
+inspect the repository to get oriented." If you find yourself writing
+that sentence, you are in the failure mode. Stop. Read your state
+file instead. If there isn't one, make one.
+
+A FEW MORE PRACTICAL NOTES
+--------------------------
+
+  • **Discoveries are expensive. Persist them immediately.** If you
+    just ran `grep -rn "foo" repo/` and found that `foo` is defined
+    in `bar/baz.py:42`, append that fact to your state file in the
+    same turn. Don't wait. The next turn may not see this output.
+
+  • **Long outputs are dangerous.** A single `cat` of a 500-line
+    file may consume your entire window. Prefer `sed -n '120,160p'`,
+    `head`, `grep -A 5`. If you must read a long file, do it
+    deliberately, knowing it will dominate this turn's context.
+    Persist the relevant lines (just the lines you care about) to
+    a file so next turn you can read the distilled version.
+
+  • **Commands fail silently in the goldfish regime.** If you ran
+    `pytest` and it produced 800 lines of output, those 800 lines
+    are about to scroll past the window. Pipe to a file:
+    `pytest > test.log 2>&1`. Then `tail -40 test.log` next turn.
+
+  • **Don't reinvent. If your state file says you already tried X and
+    it failed, don't try X again.** This sounds obvious. It is, in
+    practice, the single most common failure mode at small L.
+
+  • **When you have a fix, commit it to disk and `done` quickly.**
+    The harness extracts your patch from a `git diff` or from
+    `user_output/answer.patch`. If you have the fix in repo/, do:
+    `git -C repo diff > /tmp/answer.patch && export
+    /tmp/answer.patch && done`. Don't second-guess. Second-guessing
+    at small L is how confirmed fixes get lost to amnesia.
+
+YOU ARE A GOLDFISH WITH A NOTEBOOK
+----------------------------------
+
+That's the whole frame. You forget things. The notebook does not.
+Spend a couple of tokens every turn on writing, save many tokens
+every turn on not having to re-derive. That trade is almost always
+worth it.
+
+If you do this well, a trajectory of 30 turns at L={k} can solve
+problems that you would not believe were solvable with so little
+visible context. If you do it poorly, no amount of context window
+will save you — you'll just thrash slower.
 """
 
 

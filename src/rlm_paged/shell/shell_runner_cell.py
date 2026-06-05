@@ -119,30 +119,39 @@ def _truncate_to_k_tokens(text: str, k: int) -> tuple[str, bool]:
     return token_decode(ids), True
 
 
-def _inject_position_markers(text: str, every: int = 16) -> str:
-    """Insert «@N» markers every `every` tokens of `text`.
+def _inject_position_markers(text: str, *, every: int, k: int) -> str:
+    """Wrap `text` with explicit budget annotations.
 
-    These markers tell the model where in its budget it is. They are
-    inserted AFTER truncation so they don't count toward the L cap.
-    They ARE counted toward billing (every char goes to the API), but
-    that's a fixed overhead the user-supplied prompt tolerates.
+    Format:
+        ⟪INPUT: 0/{k} tokens⟫
+        <chunk of `every` tokens>⟪16/{k}⟫
+        <chunk of `every` tokens>⟪32/{k}⟫
+        ...
+        <last chunk>⟪{n}/{k} END⟫
 
-    The marker uses guillemets («») rather than ASCII so it's
-    visually distinct from any code/output in the agent's history.
+    Earlier iteration used plain «@N» — model treated them as noise.
+    This version explicitly frames each marker as a fraction of the
+    `k`-token budget and brackets the whole context with a header/
+    footer, so it's hard for the model to ignore the constraint.
+
+    Markers do NOT count toward the {k}-token cap (truncation already
+    happened); they ARE billed by the API.
     """
     if every <= 0:
         return text
     ids = token_encode(text)
-    if len(ids) <= every:
-        # Still annotate with one marker at end so the model knows we
-        # could have annotated if there were enough tokens.
-        return f"{text}«@{len(ids)}»"
-    chunks: list[str] = []
-    for i in range(0, len(ids), every):
+    n = len(ids)
+    head = f"⟪INPUT: 0/{k} tokens — every chunk below is exactly {every} tokens⟫\n"
+    tail = f"\n⟪{n}/{k} — END OF CONTEXT — you have ~{max(0, k - n)} tokens of headroom⟫"
+    if n <= every:
+        return f"{head}{text}{tail}"
+    chunks: list[str] = [head]
+    for i in range(0, n, every):
         slice_ids = ids[i : i + every]
         chunks.append(token_decode(slice_ids))
-        # Place a marker labeled with the cumulative token count.
-        chunks.append(f"«@{min(i + every, len(ids))}»")
+        marker_pos = min(i + every, n)
+        chunks.append(f"⟪{marker_pos}/{k}⟫")
+    chunks.append(tail)
     return "".join(chunks)
 
 
@@ -321,7 +330,7 @@ def run_shell_cell(
             # the model how much of its L-token budget it has used. They
             # do NOT count toward L (truncation already happened).
             if cell.prompt_variant == "tinystate":
-                context = _inject_position_markers(context, every=16)
+                context = _inject_position_markers(context, every=16, k=k)
 
             prompt = context
             fs.write_stdin(turn, prompt)
