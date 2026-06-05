@@ -1,0 +1,19 @@
+sweep:
+  L_values: [2048]
+  include_native_baseline: true
+providers:
+  - openai:gpt-4o
+benchmarks:
+  swe_bench_verified:
+    scorer_mode: subprocess
+    scorer_timeout_s: 1800.0
+    task_ids:
+      - "django__django-13658"
+      - "django__django-11630"
+      - "sympy__sympy-22456"
+      - "sympy__sympy-13647"
+      - "django__django-13710"
+cost_cap_tokens: 250000
+max_turns: 20
+command_timeout_s: 60.0
+seeds: [0]
