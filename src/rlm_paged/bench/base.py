@@ -41,3 +41,10 @@ class BenchSuite(ABC):
         """Render the task's user prompt. Default: just the question text."""
         q = task.payload.get("question", "")
         return q
+
+    def system_prompt_addendum(self) -> str | None:
+        """Optional benchmark-specific instructions appended to the system
+        prompt. Default None. SWE-bench overrides this to explain that
+        the delivery must be a unified-diff patch, the env is pre-set,
+        etc. — guidance that only applies to SWE-bench-shaped tasks."""
+        return None

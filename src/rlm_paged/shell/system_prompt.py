@@ -246,6 +246,91 @@ user_output/ → done. Skip any of those steps and the score will be 0.
 
 
 # --------------------------------------------------------------------------
+# Generic turn hygiene — applies to any task, any variant, any L
+# --------------------------------------------------------------------------
+#
+# Targets behaviors we have watched fail repeatedly across many trajectories:
+#   1. "I'll start by reading the task instructions..." preamble (every turn)
+#   2. Heredocs (cat > file <<'EOF' ... EOF) that get truncated mid-EOF and
+#      corrupt the file
+#   3. Model exports a valid artifact, then keeps iterating and overwrites
+#      it with a broken one
+#   4. Model says "patch successfully exported" while wc -c shows 0 bytes —
+#      assumes work happened when it did not
+#
+# Goes AFTER the main template, BEFORE variant- and benchmark-specific
+# addenda. Generic because it does not assume what artifact the task wants;
+# it just says "export only the canonical answer" without specifying shape.
+
+_GENERIC_HYGIENE = """
+
+TURN HYGIENE — applies to any task
+==================================
+
+Three rules that hold regardless of what you are working on. We watch
+trajectories die from these reflexes more than from any context-window
+limit.
+
+1. **NEVER open a turn with "I'll start by reading..." or "Let me re-orient..."
+   or "To understand the context..."**.
+   That sentence costs 15-20 tokens of your visible budget every time you
+   write it, and signals to yourself that you've forgotten everything from
+   prior turns. If you have notes/state files, read THOSE — not the
+   original prompt — at the top of every non-zeroth turn. The very first
+   content of every reply should be a fenced ```bash block, not prose.
+
+2. **NEVER use heredocs (`<<'EOF'` ... `EOF`) to write FILES** you will
+   read back later.
+   At small output budgets your response may be truncated before reaching
+   the closing `EOF`, which corrupts the file and breaks every subsequent
+   read of it. Use `printf` or single `echo` lines instead:
+       printf '%s\\n' 'fact 1' 'fact 2' > state.md
+       echo 'discovered: foo is at file.py:42' >> notes.md
+   Heredocs are fine inside `python3 -` for inline scripts that fit in one
+   turn — just not for content you will load again next turn.
+
+3. **ONCE YOU HAVE THE ANSWER, DELIVER AND STOP. Do not iterate.**
+   The first complete delivery wins. Subsequent edits OVERWRITE your good
+   output. If you have exported a valid artifact and confirmed it is
+   non-empty (`wc -c user_output/*`), call `done` in the same turn. Resist
+   the urge to "verify it one more time" or "tweak slightly". If something
+   is genuinely wrong, you can fix it — but if you just want to
+   double-check, that is the bug. Trust your own work.
+
+WHAT `export` MEANS
+-------------------
+`export <path>` makes the named file your DELIVERY to the user. Only ONE
+artifact is the "answer" for any given task. Exporting other files (test
+files you read, your notes, intermediate scratch) does NOT score them —
+those uploads are ignored. The grader knows what shape of artifact to
+expect; producing something different gets you zero credit no matter how
+interesting the file is.
+
+`export-string "literal text"` is the same but for inline content.
+The text IS LITERAL — `export-string "<your answer here>"` writes the
+literal characters `<your answer here>` to the output file. Always
+substitute placeholders before emitting.
+
+CONFIRMATION LANGUAGE MUST MATCH REALITY
+----------------------------------------
+Do NOT write "the patch has been successfully created and exported"
+until you have actually seen `wc -c user_output/answer.patch` print a
+positive number. The shell's silence after a command does NOT mean it
+succeeded. CHECK before claiming.
+"""
+
+
+# --------------------------------------------------------------------------
+# Scratchpad addendum: filesystem-as-memory variant
+# --------------------------------------------------------------------------
+#
+# Under tight L the rolling history.txt window evicts old turns. The model
+# can't remember what it already learned, so it re-`cat`s instructions.txt
+# every few turns and re-explores files it already read. The only thing
+# that survives across turns is the agent filesystem itself.
+
+
+# --------------------------------------------------------------------------
 # Scratchpad addendum: filesystem-as-memory variant
 # --------------------------------------------------------------------------
 #
@@ -552,28 +637,42 @@ def render_system_prompt(
     timeout_s: float,
     max_out: int = 4096,
     variant: str = "baseline",
+    task_addendum: str | None = None,
 ) -> str:
     """Render the harness system prompt.
 
+    Composition order (top → bottom):
+      1. Main template (env, output format, limits, hard rules)
+      2. Generic turn-hygiene rules (apply to any task)
+      3. Variant addendum (scratchpad / tinystate / none)
+      4. Task-specific addendum (SWE-bench / GPQA / whatever the
+         suite returns from system_prompt_addendum())
+
+    Generic rules go before the variant so the variant addendum can
+    still reference them ("see HYGIENE RULE 3 above"). Task-specific
+    rules go last so they can override / specialize where needed
+    (e.g., SWE-bench narrows "the canonical answer" to "a unified
+    diff").
+
     Args:
       k: context-window cap in tokens — last `k` of history.txt
-         survives into the next turn. This is the L of the goldfish
-         regime under study.
+         survives into the next turn.
       timeout_s: per-command timeout.
-      max_out: per-turn output budget. Independent of k. Capping at
-         k for small L causes 100% LENGTH-CAP turns with zero output
-         (reasoning tokens consume the entire budget). See bug-15
-         fix in shell_runner_cell.py.
-      variant: "baseline" or "scratchpad" — scratchpad adds the
-         paged-memory protocol mandating notes.md every turn.
+      max_out: per-turn output budget.
+      variant: "baseline" / "scratchpad" / "tinystate".
+      task_addendum: optional benchmark-specific block (e.g. SWE-bench
+         delivery rules). Pulled from suite.system_prompt_addendum().
     """
     body = SYSTEM_PROMPT_TEMPLATE.format(
         k=k, timeout_s=timeout_s, max_out=max_out,
     )
+    body = body + _GENERIC_HYGIENE
     if variant == "scratchpad":
         body = body + _SCRATCHPAD_RULE.format(k=k)
     elif variant == "tinystate":
         body = body + _TINYSTATE_RULE.format(k=k, max_out=max_out)
     elif variant != "baseline":
         raise ValueError(f"unknown prompt variant: {variant!r}")
+    if task_addendum:
+        body = body + task_addendum
     return body

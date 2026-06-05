@@ -283,6 +283,7 @@ def run_shell_cell(
         timeout_s=cell.command_timeout_s,
         max_out=max_out,
         variant=cell.prompt_variant,
+        task_addendum=suite.system_prompt_addendum(),
     )
 
     input_tokens = 0

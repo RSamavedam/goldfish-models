@@ -119,6 +119,79 @@ pytest. Keep iterations small; the cost cap is real.
 """
 
 
+# SWE-bench-specific system-prompt addendum. Appended to the system
+# prompt when this suite is the active benchmark. Encodes lessons
+# learned from watching gpt-4o + gpt-5 trajectories: model exports
+# wrong file, claims success while patch is empty, spends turns
+# trying to install astropy, uses heredocs that get truncated,
+# overwrites a good patch by iterating.
+_SWE_BENCH_SYSTEM_ADDENDUM = """
+
+SWE-BENCH SPECIFICS
+===================
+
+This task is from SWE-bench Verified. After your trajectory ends, the
+official grader runs your patch against a pre-built Docker environment
+with the real repo at the exact base commit, and executes the held-out
+test suite. You see only the problem statement; the tests are hidden.
+
+YOUR DELIVERY MUST BE A UNIFIED DIFF
+------------------------------------
+The ONLY valid `export` is a unified-diff patch produced by
+`git -C repo diff`. Exporting anything else - a test file you read,
+the original source, a summary document, your notes - will be
+SILENTLY REJECTED. The grader checks for `---`, `+++`, and `@@`
+hunk markers; without them, score = 0 without even running.
+
+The canonical end-of-task shape, every time:
+    ```bash
+    git -C repo diff > /tmp/answer.patch
+    wc -c /tmp/answer.patch          # MUST be > 0 bytes
+    export /tmp/answer.patch
+    done
+    ```
+
+If `wc -c` says 0 bytes, you have NOT changed any files yet - your
+sed/edit didn't take effect. Diagnose THAT before exporting. An empty
+patch always scores 0; do not export it. Do not call `done` until
+the patch is verified non-empty.
+
+THE ENVIRONMENT IS PRE-SET - DON'T FIX IT
+-----------------------------------------
+Inside the agent, `pytest` may fail with "module not found" because
+the repo's full dependency set isn't installed here. THAT IS EXPECTED
+and DOES NOT MATTER. The official Docker scorer has the real env.
+You do NOT need to:
+  - install dependencies
+  - create stub modules to bypass missing packages
+  - work around the security allowlist
+Your only job is to PRODUCE THE PATCH. If `pytest` won't import the
+package, STOP trying to fix the env. Start writing the fix instead.
+
+EDITING FILES SAFELY
+--------------------
+The shell is fresh per command (no cwd persistence). To edit:
+    sed -i 's/OLD/NEW/' repo/path/to/file.py
+or for multi-line / complex edits:
+    python3 - <<'PY'
+    p = "repo/path/to/file.py"
+    s = open(p).read()
+    s = s.replace("OLD", "NEW")
+    open(p, "w").write(s)
+    PY
+(Heredocs are okay in `python3 -` for inline scripts that fit in one
+turn. AVOID them for FILES you'll read back later - they break under
+output truncation.)
+
+Verify the edit landed BEFORE generating the diff:
+    grep "NEW" repo/path/to/file.py
+Then:
+    git -C repo diff
+should show your change. If it doesn't, the edit didn't stick - try
+the python3 - <<PY approach instead of sed.
+"""
+
+
 class SweBenchVerifiedSuite(BenchSuite):
     """SWE-bench Verified subset.
 
@@ -220,6 +293,9 @@ class SweBenchVerifiedSuite(BenchSuite):
             problem_statement=p["problem_statement"],
             hints_section=hints_section,
         )
+
+    def system_prompt_addendum(self) -> str:
+        return _SWE_BENCH_SYSTEM_ADDENDUM
 
     # ----------------------------------------------------- scoring
 
